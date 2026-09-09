@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Tibo 观察站</title>
+  <desc>原创蓝黄圆角徽章，几何字母 T 与感叹号。</desc>
+  <rect x="49" y="60" width="408" height="408" rx="92" fill="#243047"/>
+  <rect x="48" y="44" width="404" height="404" rx="90" fill="#3d91f5" stroke="#243047" stroke-width="12"/>
+  <g transform="rotate(-7 253 251)">
+    <rect x="107" y="119" width="310" height="292" rx="66" fill="#243047"/>
+    <rect x="98" y="105" width="310" height="292" rx="66" fill="#ffce3b" stroke="#243047" stroke-width="10"/>
+    <path d="M149 176H286V225H244V356H191V225H149Z" fill="#243047"/>
+    <path d="M313 176H364L356 294H321Z" fill="#243047"/>
+    <circle cx="338" cy="337" r="25" fill="#243047"/>
+  </g>
+</svg>

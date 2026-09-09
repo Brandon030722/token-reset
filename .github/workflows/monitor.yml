@@ -1,0 +1,53 @@
+name: Cloud monitor and email
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      test_email:
+        description: 'Send one clearly labelled connection test to the configured test address'
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: token-reset-mail-publisher
+  cancel-in-progress: false
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify monitor before accessing mail credentials
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Configure durable checkpoint identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Monitor public timeline
+        id: poll
+        env:
+          TIBO_FEED_URLS: ${{ vars.TIBO_FEED_URLS }}
+          TIBO_MAIL_PROVIDER: brevo
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          BREVO_LIST_ID: ${{ secrets.BREVO_LIST_ID }}
+          BREVO_FROM_EMAIL: ${{ secrets.BREVO_FROM_EMAIL }}
+          BREVO_OPT_IN_CONFIRMED: ${{ vars.BREVO_OPT_IN_CONFIRMED }}
+          TIBO_SEND_EMAIL: ${{ vars.TIBO_SEND_EMAIL }}
+        run: python -m monitor --once --state .monitor/state.sqlite3 --output public/data --git-checkpoint
+      - name: Verify cloud mail readiness or send requested test
+        if: success()
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          BREVO_LIST_ID: ${{ secrets.BREVO_LIST_ID }}
+          BREVO_FROM_EMAIL: ${{ secrets.BREVO_FROM_EMAIL }}
+          BREVO_TEST_RECIPIENT: ${{ secrets.BREVO_TEST_RECIPIENT }}
+          SEND_CONNECTION_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test_email }}
+        run: python -m monitor.cloud_check
