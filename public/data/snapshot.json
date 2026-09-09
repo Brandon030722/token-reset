@@ -1,9 +1,32 @@
 {
   "version": 1,
   "mode": "live",
-  "checkedAt": "2026-09-09T18:05:05.406347Z",
+  "checkedAt": "2026-09-09T20:59:51.254110Z",
   "forecast": null,
-  "events": [],
-  "evidence": [],
+  "events": [
+    {
+      "id": "limited-2097752790177370535",
+      "title": "小范围重置公告",
+      "type": "limited-reset",
+      "status": "promised",
+      "scope": "在受影响时段使用过 banked reset 的用户；涉及 ChatGPT Work 和 Codex。",
+      "announcedAt": "2026-09-09T18:23:34Z",
+      "evidenceIds": [
+        "post-2097752790177370535"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "post-2097752790177370535",
+      "eventId": "limited-2097752790177370535",
+      "author": "@thsottiaux",
+      "postedAt": "2026-09-09T18:23:34Z",
+      "text": "There was a bit of a kerfuffle this morning with some banked resets not fully applying when used in ChatGPT Work and Codex. Everyone who used one in the affected time window is getting another one and an email to apologize.",
+      "url": "https://x.com/thsottiaux/status/2097752790177370535",
+      "kind": "context",
+      "summary": "原帖宣布限定范围的额度重置；不代表全体用户适用，完成情况请核对原文。"
+    }
+  ],
   "history": []
 }
