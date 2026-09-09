@@ -1,5 +1,14 @@
 # 云端邮件与本机每周额度 · 0.7
 
+## 本次部署验证（2026-09-10）
+
+- 公开仓库：[Brandon030722/token-reset](https://github.com/Brandon030722/token-reset)；[线上观察站](https://brandon030722.github.io/token-reset/)。
+- [首次云端监控](https://github.com/Brandon030722/token-reset/actions/runs/34404338357)成功采集 60 条公开动态并建立历史基线；未发现达到门槛的事件，未发送公告邮件。
+- [云端连接测试](https://github.com/Brandon030722/token-reset/actions/runs/34404795905)通过，指定测试收件人已确认收信。测试邮件明确标注非重置公告，没有向订阅名单群发。
+- [网站发布](https://github.com/Brandon030722/token-reset/actions/runs/34404296046)在启用 Pages 后重新运行成功；已实测线上页面读取真实公开动态。首次启用之前的 404 失败通知是历史记录。
+- 云端 `TIBO_SEND_EMAIL=true`，管理员本机 `sendEmail=false`，由云端单独发送公告邮件。分发包仍不包含管理员密钥或个人额度。
+- 回归测试通过：7 项 TypeScript、94 项 Python；macOS 0.7.0 构建与签名校验通过，打包后的 helper 已成功读取本机真实七天窗口。未来真实每周到点通知尚未经过完整一周的实机等待验证；相关状态转换通过模拟时钟测试。
+
 ## 两条提醒链路
 
 | 提醒 | 读取内容 | 执行位置 | 电脑关机时 |
