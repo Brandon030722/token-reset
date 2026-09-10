@@ -49,9 +49,16 @@ function signupPage() {
 }
 export function service({fetcher = fetch, clock = Date.now} = {}) {
   const api = async (env, method, path, payload) => {
-    const response = await fetcher('https://api.brevo.com/v3' + path, {method, redirect:'error', signal:AbortSignal.timeout(10000), headers:{'api-key':env.BREVO_API_KEY,'Content-Type':'application/json'}, ...(payload ? {body:JSON.stringify(payload)} : {})});
+    const response = await fetcher('https://api.brevo.com/v3' + path, {method, redirect:'manual', signal:AbortSignal.timeout(10000), headers:{'api-key':env.BREVO_API_KEY,'Content-Type':'application/json'}, ...(payload ? {body:JSON.stringify(payload)} : {})});
     if (response.status === 404) return null;
-    required(response.ok, 503, '邮件服务暂时不可用，请稍后检查状态。');
+    if (!response.ok) {
+      let details; try { details = await response.json(); } catch { details = {}; }
+      const error = new Fault(503, '邮件服务暂时不可用，请稍后检查状态。');
+      error.providerStatus = response.status;
+      error.providerCode = typeof details?.code === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(details.code) ? details.code : 'provider-error';
+      error.stage = path === '/account' ? 'account' : path === '/smtp/email' ? 'send' : 'contacts';
+      throw error;
+    }
     return response.status === 204 ? {} : response.json();
   };
   const stmt = (env, sql, ...values) => env.DB.prepare(sql).bind(...values);
@@ -124,7 +131,9 @@ export function service({fetcher = fetch, clock = Date.now} = {}) {
       const link = env.PUBLIC_ORIGIN + '/confirm#' + confirmation;
       try {
         await mail(env, email, '请确认订阅 Token重置 邮件提醒', emailShell('消息来了，我们提醒你。', '<p>欢迎来到 Token重置。你已通过邀请验证，再确认一下邮箱，就可以安心等待下一次提醒了。</p><p>确认后开启重置信号邮件；个人每周到点邮件由你在应用里单独开启。</p>' + button('确认我的订阅', link) + '<p style="font-size:13px;color:#68758b">链接 24 小时有效。如果不是你申请的，忽略这封邮件即可。</p>'));
-      } catch { return json({token,subscriptionStatus:'pending',email,message:'发信结果尚未确认，请检查邮箱；如未收到，10 分钟后可重新申请。'}, 202); }
+      } catch (error) {
+        await stmt(env, 'INSERT INTO mail_diagnostics(id,stage,status,code,created_at) VALUES (?,?,?,?,?)', random(), error.stage || 'send-unknown', error.providerStatus || null, error.providerCode || (error.name === 'TimeoutError' ? 'timeout' : 'unconfirmed'), clock()).run();
+        return json({token,subscriptionStatus:'pending',email,message:'发信结果尚未确认，请检查邮箱；如未收到，10 分钟后可重新申请。'}, 202); }
       return json({token,subscriptionStatus:'pending',email,message:'确认邮件已提交，请点击邮件按钮完成确认。'}, 202);
     }
     if (url.pathname === '/v1/confirm') {
@@ -183,7 +192,10 @@ export function service({fetcher = fetch, clock = Date.now} = {}) {
       stmt(env, 'UPDATE schedules SET enabled=0 WHERE subscriber_id=?', id),
       stmt(env, "UPDATE jobs SET status='cancelled' WHERE subscriber_id=? AND status='pending'", id)
     ]);
-    await api(env, 'POST', '/contacts/lists/' + env.BREVO_LIST_ID + '/contacts/remove', {emails:[email]});
+    const contact = await api(env, 'GET', '/contacts/' + encodeURIComponent(email));
+    if (contact?.listIds?.includes(Number(env.BREVO_LIST_ID))) {
+      await api(env, 'POST', '/contacts/lists/' + env.BREVO_LIST_ID + '/contacts/remove', {emails:[email]});
+    }
   }
   async function scheduled(env) {
     configured(env);

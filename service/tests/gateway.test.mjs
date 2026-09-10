@@ -7,6 +7,7 @@ const DAY = 86400000;
 function fixture() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(readFileSync(new URL('../migrations/0001.sql', import.meta.url), 'utf8'));
+  sqlite.exec(readFileSync(new URL('../migrations/0002.sql', import.meta.url), 'utf8'));
   const DB = {
     prepare(sql) {
       return {bind(...args) {
@@ -24,6 +25,7 @@ function fixture() {
   const sent=[], contacts=new Map();
   const env={DB,INVITE_CODE:'TEST-ONLY-invite-not-for-production',RATE_SALT:'x'.repeat(32),BREVO_API_KEY:'fake-provider-key',BREVO_LIST_ID:'19',BREVO_FROM_EMAIL:'sender@example.com',PUBLIC_ORIGIN:'https://mail.example.com'};
   const app=service({clock:()=>now,fetcher:async(url,options)=>{
+    assert.equal(options.redirect,'manual','Worker must prevent redirects without unsupported error mode');
     const path=new URL(url).pathname.replace('/v3',''); const body=options.body&&JSON.parse(options.body);
     if(path==='/account') return Response.json({plan:[{type:'free',creditsType:'sendLimit',credits:300}]});
     if(path==='/smtp/email') {sent.push(body);if(failure)throw Error('accepted but timed out');return Response.json({messageId:'test-id'});}
