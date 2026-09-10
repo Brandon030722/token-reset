@@ -4,7 +4,7 @@
 
 关注 Tibo 的公开动态，整理 Codex 额度重置线索，并为受邀用户提供邮件提醒。
 
-[打开在线看板](https://brandon030722.github.io/token-reset/) · [下载 Mac 应用](https://github.com/Brandon030722/token-reset-desktop/releases/tag/v0.1.1) · [邀请订阅邮件](https://token-reset-mail.brandon030722-token-reset.workers.dev/subscribe)
+[打开在线看板](https://brandon030722.github.io/token-reset/) · [下载 Mac / Windows 应用](https://github.com/Brandon030722/token-reset-desktop/releases/tag/v0.1.2) · [邀请订阅邮件](https://token-reset-mail.brandon030722-token-reset.workers.dev/subscribe)
 
 ## 免费查看重置线索
 
@@ -20,9 +20,9 @@
 
 邀请码请向邀请人获取，公开仓库不附带有效邀请码。
 
-## 配合 Mac 应用使用
+## 配合桌面应用使用
 
-[Token重置 Mac 版](https://github.com/Brandon030722/token-reset-desktop)常驻屏幕顶部的 **T!** 菜单栏图标，点击才打开独立面板。
+[Token重置桌面版](https://github.com/Brandon030722/token-reset-desktop)提供 Mac（Apple 芯片）和 Windows x64 下载。**T!** 图标常驻 Mac 菜单栏或 Windows 任务栏托盘，关闭面板后仍继续监控。
 
 - 查看公开重置动态，接收本机系统通知。
 - 小范围重置和补偿公告单独提醒，并标明适用范围。
