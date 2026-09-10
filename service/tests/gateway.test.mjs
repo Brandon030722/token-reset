@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {service,validateSchedule} from '../worker.mjs';
@@ -8,6 +9,8 @@ function fixture() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(readFileSync(new URL('../migrations/0001.sql', import.meta.url), 'utf8'));
   sqlite.exec(readFileSync(new URL('../migrations/0002.sql', import.meta.url), 'utf8'));
+  sqlite.exec(readFileSync(new URL('../migrations/0003.sql', import.meta.url), 'utf8'));
+  sqlite.prepare('INSERT INTO invitations(code_hash,created_at) VALUES (?,?)').run(createHash('sha256').update('TEST-ONLY-invite-not-for-production').digest('hex'),0);
   const DB = {
     prepare(sql) {
       return {bind(...args) {
@@ -98,7 +101,7 @@ test('provider unsubscribe is honored and ambiguous delivery is not retried',asy
 test('bounded registration rate, expiration, missing config fail closed',async()=>{
   const f=fixture(),s=await f.subscribe();assert.equal((await f.call('/v1/subscribe',{email:'user@example.com',invite:f.env.INVITE_CODE})).status,429);
   f.advance(DAY+1);assert.equal((await f.call('/v1/confirm',{token:s.confirmation})).status,410);
-  f.env.INVITE_CODE='';assert.equal((await f.call('/v1/subscribe',{email:'a@example.com',invite:''})).status,503);
+  f.env.RATE_SALT='';assert.equal((await f.call('/v1/subscribe',{email:'a@example.com',invite:''})).status,503);
 });
 test('reject malformed and non-weekly deadlines',()=>{
   const f=fixture(),body=f.schedule();assert.throws(()=>validateSchedule({...body,windows:[{...body.windows[0],windowDurationMins:300}]},f.now()));
@@ -121,4 +124,49 @@ test('account change cancels just-due old account and disabled request cancels a
   const disabled={...f.schedule(),scope:'b'.repeat(32),enabled:false,windows:[]};
   assert.equal((await f.call('/v1/schedule',disabled,s.token)).status,200);
   f.advance(DAY+1);await f.app.scheduled({},f.env);assert.equal(f.sent.length,1);
+});
+
+test('pending requests do not reserve codes; concurrent email confirmations have one winner',async()=>{
+  const f=fixture(),a=await f.subscribe('a@example.com'),b=await f.subscribe('b@example.com');
+  assert.equal(f.sqlite.prepare('SELECT subscriber_id FROM invitations').get().subscriber_id,null);
+  const results=await Promise.all([a,b].map(s=>f.call('/v1/confirm',{token:s.confirmation})));
+  assert.deepEqual(results.map(r=>r.status).sort(),[200,403]);
+  assert.equal(f.contacts.size,1);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM subscribers WHERE active=1').get().n,1);
+  const loser=results[0].status===403?'a@example.com':'b@example.com';
+  f.advance(600001);
+  assert.equal((await f.call('/v1/subscribe',{email:loser,invite:f.env.INVITE_CODE})).status,403);
+});
+test('bound email is normalized, supports multiple devices, and cannot transfer after unsubscribe',async()=>{
+  const f=fixture(),a=await f.activate(' User@Example.COM ');f.advance(600001);
+  const b=await f.activate('user@example.com');
+  for(const s of [a,b]) assert.equal((await f.call('/v1/status',undefined,s.token)).data.subscriptionStatus,'active');
+  await f.call('/v1/cancel',{},a.token);f.advance(600001);
+  assert.equal((await f.call('/v1/subscribe',{email:'other@example.com',invite:f.env.INVITE_CODE})).status,403);
+  const restored=await f.activate();
+  assert.equal((await f.call('/v1/status',undefined,restored.token)).data.subscriptionStatus,'active');
+});
+test('expired pending email leaves code available; revoked codes cannot confirm',async()=>{
+  const f=fixture(),a=await f.subscribe('a@example.com');f.advance(DAY+1);
+  assert.equal((await f.call('/v1/confirm',{token:a.confirmation})).status,410);
+  const b=await f.subscribe('b@example.com');f.sqlite.exec('UPDATE invitations SET revoked=1');
+  assert.equal((await f.call('/v1/confirm',{token:b.confirmation})).status,403);
+  assert.equal(f.contacts.size,0);
+});
+test('legacy confirmed sessions retain schedules, but legacy pending sessions cannot activate',async()=>{
+  const f=fixture(),a=await f.activate();
+  f.sqlite.exec('UPDATE sessions SET invite_hash=NULL');
+  assert.equal((await f.call('/v1/schedule',f.schedule(),a.token)).status,200);
+  f.advance(600001);const b=await f.subscribe();f.sqlite.exec('UPDATE sessions SET invite_hash=NULL WHERE confirmed=0');
+  assert.equal((await f.call('/v1/confirm',{token:b.confirmation})).status,403);
+  assert.equal((await f.call('/v1/status',undefined,a.token)).data.subscriptionStatus,'active');
+});
+test('provider rejection keeps code bound and allows same email confirmation retry',async()=>{
+  const f=fixture(),a=await f.subscribe();
+  f.contacts.set('user@example.com',{emailBlacklisted:true,listIds:[]});
+  assert.equal((await f.call('/v1/confirm',{token:a.confirmation})).status,409);
+  assert.ok(f.sqlite.prepare('SELECT subscriber_id FROM invitations').get().subscriber_id);
+  assert.equal((await f.call('/v1/subscribe',{email:'other@example.com',invite:f.env.INVITE_CODE})).status,403);
+  f.contacts.get('user@example.com').emailBlacklisted=false;
+  assert.equal((await f.call('/v1/confirm',{token:a.confirmation})).status,200);
 });

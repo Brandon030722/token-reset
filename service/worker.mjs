@@ -3,14 +3,13 @@ const DAY = 86400000;
 const enc = new TextEncoder();
 export const digest = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(value))), b => b.toString(16).padStart(2, '0')).join('');
 const random = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
-const eq = (a, b) => { let n = a.length ^ b.length; for (let i = 0; i < a.length; i++) n |= a.charCodeAt(i) ^ (b.charCodeAt(i) || 0); return n === 0; };
 const validToken = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 class Fault extends Error { constructor(status, message) { super(message); this.status = status; } }
 const json = (value, status = 200) => new Response(JSON.stringify(value), {status, headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const required = (value, status, message) => { if (!value) throw new Fault(status, message); };
 function configured(env) {
-  required(env.DB && env.BREVO_API_KEY && env.INVITE_CODE?.length >= 20 && env.RATE_SALT?.length >= 32 &&
+  required(env.DB && env.BREVO_API_KEY && env.RATE_SALT?.length >= 32 &&
     /^\d+$/.test(env.BREVO_LIST_ID) && /^https:\/\/[^/]+$/.test(env.PUBLIC_ORIGIN) &&
     /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(env.BREVO_FROM_EMAIL), 503, '邮件服务尚未开放，请稍后再试。');
 }
@@ -44,7 +43,7 @@ function actionPage(action) {
 }
 function signupPage() {
   const script = `document.querySelector('form').onsubmit=async(e)=>{e.preventDefault();const b=document.querySelector('button');b.disabled=true;try{const r=await fetch('/v1/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.querySelector('#email').value,invite:document.querySelector('#invite').value})});const d=await r.json();document.querySelector('#message').textContent=d.message;if(r.ok)document.querySelector('#invite').value='';}catch{document.querySelector('#message').textContent='连接失败，请稍后重试。'}b.disabled=false;};`;
-  const html=emailShell('有消息时，再来找你。', `<p>使用邀请码开启提醒。邮箱确认后，由 Token重置 统一发信。</p><form><label for="email">收件邮箱</label><input id="email" type="email" maxlength="254" autocomplete="email" required style="box-sizing:border-box;width:100%;padding:12px;margin:8px 0 16px;border:1px solid #b4c3d5;border-radius:10px;font:inherit"><label for="invite">邀请码</label><input id="invite" type="password" maxlength="128" autocomplete="off" required style="box-sizing:border-box;width:100%;padding:12px;margin:8px 0 16px;border:1px solid #b4c3d5;border-radius:10px;font:inherit"><button style="background:#ffcf3f;border:2px solid #23324a;border-radius:28px;padding:12px 24px;font:inherit;font-weight:bold">验证并发送确认邮件</button><p id="message" role="status"></p></form><script>${script}</script>`, '确认后订阅，可随时退订。没有邀请码也能免费使用看板。');
+  const html=emailShell('有消息时，再来找你。', `<p>一个邀请码绑定一个邮箱，可在多台设备使用。确认后由 Token重置 统一发信。</p><form><label for="email">收件邮箱</label><input id="email" type="email" maxlength="254" autocomplete="email" required style="box-sizing:border-box;width:100%;padding:12px;margin:8px 0 16px;border:1px solid #b4c3d5;border-radius:10px;font:inherit"><label for="invite">邀请码</label><input id="invite" type="password" maxlength="128" autocomplete="off" required style="box-sizing:border-box;width:100%;padding:12px;margin:8px 0 16px;border:1px solid #b4c3d5;border-radius:10px;font:inherit"><button style="background:#ffcf3f;border:2px solid #23324a;border-radius:28px;padding:12px 24px;font:inherit;font-weight:bold">验证并发送确认邮件</button><p id="message" role="status"></p></form><script>${script}</script>`, '确认后订阅，可随时退订。没有邀请码也能免费使用看板。');
   return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"}});
 }
 export function service({fetcher = fetch, clock = Date.now} = {}) {
@@ -118,16 +117,18 @@ export function service({fetcher = fetch, clock = Date.now} = {}) {
     let body; try { body = JSON.parse(await new Blob(chunks).text()); } catch { throw new Fault(400, '请求格式错误。'); }
     if (url.pathname === '/v1/subscribe') {
       await limit(env, 'signup-ip:' + ip, 10, 3600000);
-      required(typeof body.invite === 'string' && body.invite.length <= 128 && eq(await digest(body.invite.trim()), await digest(env.INVITE_CODE)), 403, '邀请码无效或已停用。');
+      required(typeof body.invite === 'string' && body.invite.trim().length >= 20 && body.invite.length <= 128, 403, '邀请码无效或已停用。');
       const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
       required(email.length <= 254 && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(email), 400, '请填写有效邮箱。');
+      const invitation = await stmt(env, 'SELECT i.*,u.email AS bound_email FROM invitations i LEFT JOIN subscribers u ON u.id=i.subscriber_id WHERE i.code_hash=? AND i.revoked=0', await digest(body.invite.trim())).first();
+      required(invitation && (!invitation.subscriber_id || invitation.bound_email === email), 403, '邀请码无效、已停用或已绑定其他邮箱。');
       await limit(env, 'signup-email:' + await digest(env.RATE_SALT + email), 1, 600000);
       await limit(env, 'signup-day:' + await digest(env.RATE_SALT + email), 3, DAY);
       const token = random(), confirmation = random(), unsubscribe = random(), id = random();
       // Never invalidate an existing subscriber/session on an unconfirmed request.
       await stmt(env, 'INSERT INTO subscribers(id,email,unsubscribe_hash,created_at) VALUES (?,?,?,?) ON CONFLICT(email) DO NOTHING', id, email, await digest(unsubscribe), clock()).run();
       const subscriber = await stmt(env, 'SELECT id FROM subscribers WHERE email=?', email).first();
-      await stmt(env, 'INSERT INTO sessions(token_hash,subscriber_id,confirm_hash,expires_at,confirm_expires,created_at) VALUES (?,?,?,?,?,?)', await digest(token), subscriber.id, await digest(confirmation), clock()+90*DAY, clock()+DAY, clock()).run();
+      await stmt(env, 'INSERT INTO sessions(token_hash,subscriber_id,confirm_hash,expires_at,confirm_expires,created_at,invite_hash) VALUES (?,?,?,?,?,?,?)', await digest(token), subscriber.id, await digest(confirmation), clock()+90*DAY, clock()+DAY, clock(), invitation.code_hash).run();
       const link = env.PUBLIC_ORIGIN + '/confirm#' + confirmation;
       try {
         await mail(env, email, '请确认订阅 Token重置 邮件提醒', emailShell('消息来了，我们提醒你。', '<p>欢迎来到 Token重置。你已通过邀请验证，再确认一下邮箱，就可以安心等待下一次提醒了。</p><p>确认后开启重置信号邮件；个人每周到点邮件由你在应用里单独开启。</p>' + button('确认我的订阅', link) + '<p style="font-size:13px;color:#68758b">链接 24 小时有效。如果不是你申请的，忽略这封邮件即可。</p>'));
@@ -141,6 +142,14 @@ export function service({fetcher = fetch, clock = Date.now} = {}) {
       const row = await stmt(env, 'SELECT s.*,u.email FROM sessions s JOIN subscribers u ON s.subscriber_id=u.id WHERE confirm_hash=?', await digest(body.token)).first();
       required(row && !row.revoked && row.confirm_expires > clock(), 410, '链接已过期，请在应用重新申请。');
       if (row.confirmed) return json({message:'邮箱已确认，可以回到应用了。'});
+      // Atomic claim precedes every provider side effect. Pending requests do not
+      // reserve codes; only the first email proof wins, even across isolates.
+      const claimed = await stmt(env, `UPDATE invitations SET subscriber_id=?,bound_at=COALESCE(bound_at,?)
+        WHERE code_hash=? AND revoked=0 AND (subscriber_id IS NULL OR subscriber_id=?)
+        AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND revoked=0 AND confirm_expires>?)
+        RETURNING code_hash`, row.subscriber_id, clock(), row.invite_hash, row.subscriber_id, row.token_hash, clock()).first();
+      required(claimed, 403, '邀请码已失效或已绑定其他邮箱，请使用本人的邀请码重新申请。');
+      // Keep the binding on provider failure so the same email can safely retry.
       // The list is private to this gateway, never attached to a public form.
       await api(env, 'POST', '/contacts', {email:row.email, listIds:[Number(env.BREVO_LIST_ID)], updateEnabled:true});
       required(await eligible(env, row), 409, '此邮箱在邮件服务中已退订，请联系管理员恢复后再确认。');

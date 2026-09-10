@@ -10,7 +10,8 @@
 - 每次注册/新设备都要重新确认邮箱；知道他人的邮箱及邀请码也不能取得他的授权。
 - `GET /v1/status`、`POST /v1/schedule` 使用设备 Bearer token。预约只能发给该 token 所属的已确认邮箱；忽略客户端传入的收件人。
 - `POST /v1/cancel` 和邮件中的退订链接取消全部邮件。服务端撤销所有设备、停止预约，并移出 Brevo 邀请名单。已提交邮件无法撤回。
-- 邀请码可以由持有人转发，管理员可轮换服务端 Secret 停止旧码注册；轮换邀请码不撤销已确认订阅。
+- 一码绑定一个邮箱：首次确认时原子绑定；待确认申请不占用名额。同一邮箱可在多台设备验证，退订不会释放邀请码。已有已确认设备继续有效，旧共享码不再接受新申请。
+- 管理员可将 invitations.revoked 设为 1 停止该码后续验证；这不撤销已确认订阅。
 
 ## 部署
 
@@ -19,14 +20,14 @@
 3. `npx wrangler login`，创建 D1 数据库，把实际 ID 写入配置。
 4. `npx wrangler d1 migrations apply token-reset-mail --remote --config wrangler.jsonc`。
 5. 在 Brevo 创建新的专用名单，**不能绑定任何公开表单**。配置 `BREVO_LIST_ID`、已验证的 `BREVO_FROM_EMAIL` 和服务的 `PUBLIC_ORIGIN`。
-6. 通过 Wrangler Secret stdin 设置 `BREVO_API_KEY`、至少 20 字符随机 `INVITE_CODE`、至少 32 字符随机 `RATE_SALT`。不能把实际值放进源码、命令行参数或聊天。
+6. 通过 Wrangler Secret stdin 设置 `BREVO_API_KEY`、至少 32 字符随机 `RATE_SALT`。不能把实际值放进源码、命令行参数或聊天。
 7. `npm test`，`npx wrangler deploy --config wrangler.jsonc`。
 8. 用管理员授权的测试邮箱验证拒绝错误邀请码、邮箱确认、个人预约、投递及退订，再切换原云端仓库的 `BREVO_LIST_ID` Secret 到新名单，并关闭旧表单。经人工确认的已有订阅可由管理员迁入；不能无条件复制陌生联系人。
 9. 桌面 `public/config.json` 写入 `{"mailServiceUrl":"https://实际服务域名"}`；网站 `subscriptionUrl` 指向该域名的 `/subscribe`。
 
 ## 存储与运行
 
-D1 私有保存邮箱、token 摘要、确认状态和预约。随机 scope 区分本机账号变更，不上传 Codex 凭据、账号 ID 或额度用量。邀请码只在 Secret 中。不要公开 D1 导出或本机 `mail-session.json`。
+D1 私有保存邮箱、token 摘要、确认状态和预约。随机 scope 区分本机账号变更，不上传 Codex 凭据、账号 ID 或额度用量。邀请码只存 SHA-256 摘要及绑定关系；明文仅保存在管理员的私有签发文件中。不要公开 D1 导出或本机 `mail-session.json`。
 
 服务端对 IP、单邮箱注册和每日投递做限额；当前确认信与个人周信总计最多 200 封/日，个人周信每邮箱每天最多 4 封。发信前检查 Brevo Free 额度。旧公共群发共享 Brevo 额度，可能被耗尽；不自动付费。
 
@@ -37,3 +38,11 @@ D1 私有保存邮箱、token 摘要、确认状态和预约。随机 scope 区�
 测试使用真实 SQLite、虚拟时钟及模拟 Brevo，不向外发送邮件：`npm test`。
 
 参考：[Workers 免费额度](https://developers.cloudflare.com/workers/platform/pricing/)、[D1 文档](https://developers.cloudflare.com/d1/)、[Brevo Contacts API](https://developers.brevo.com/reference/create-contact)。
+
+## 签发邀请码
+
+在 service 目录使用 `node scripts/issue-invites.mjs --remote --count 10` 签发 10 个独立邀请码。需要管理员 Cloudflare 登录权限；不设公开管理接口。省略 `--remote` 仅操作本地数据库。
+
+首次升级先应用迁移，再使用 `--existing --count 10` 为历史已确认邮箱生成专属绑定码，并生成 10 个未使用码。重复执行不会给已有有效绑定码的邮箱再次签发。老用户无需重新订阅，新设备使用其专属码确认邮箱。
+
+明文输出到仓库忽略的 `.local/invite-service/invites-*.json`，权限为仅本人可读写。只把单个未使用码交给对应用户，不分发整个文件。`pending` 表示上传结果未确认，应核对同目录 SQL 中的摘要后再使用；不要盲目重发整批。旧 `INVITE_CODE` Secret 已不再参与验证，可删除。
