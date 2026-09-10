@@ -23,7 +23,7 @@ jobs:
       - name: Build AppKit and WKWebView app
         run: bash scripts/build_macos.sh
       - name: Check packaged helper without polling
-        run: '"artifacts/token重置.app/Contents/Resources/monitor/TiboMonitorHelper" --once --help'
+        run: '"artifacts/Token重置.app/Contents/Resources/monitor/TiboMonitorHelper" --once --help'
       - uses: actions/upload-artifact@v4
         with:
           name: token-reset-macOS-arm64

@@ -95,8 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         statusItem.autosaveName = "TiboObservatoryStatus"
         if let button = statusItem.button {
             button.image = Self.menuIcon()
-            button.setAccessibilityLabel("token重置")
-            button.toolTip = "token重置 · 左键打开，右键菜单"
+            button.setAccessibilityLabel("Token重置")
+            button.toolTip = "Token重置 · 左键打开，右键菜单"
             button.target = self
             button.action = #selector(statusClicked)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -146,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             result.isEnabled = action != nil
             return result
         }
-        _ = item("token重置 · 菜单栏监控")
+        _ = item("Token重置 · 菜单栏监控")
         _ = item(statusDescription())
         statusMenu.addItem(.separator())
         _ = item("打开观察面板", #selector(openDashboard))
@@ -169,7 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let advancedItem = item("高级选项")
         advancedItem.submenu = advanced; advancedItem.isEnabled = true
         statusMenu.addItem(.separator())
-        _ = item("退出 token重置", #selector(quit), "q")
+        _ = item("退出 Token重置", #selector(quit), "q")
     }
 
     func statusDescription() -> String {
@@ -203,7 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             if let process = worker, process.isRunning { process.terminate() }
             emit(["status": "paused"])
         }
-        statusItem.button?.toolTip = "token重置 · " + statusDescription()
+        statusItem.button?.toolTip = "Token重置 · " + statusDescription()
         if !paused { checkNow() }
     }
     @objc func wokeUp() { checkNow() }
@@ -213,7 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let menu = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "退出 token重置", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "退出 Token重置", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu; menu.addItem(appItem)
         let editItem = NSMenuItem()
         let edit = NSMenu(title: "编辑")
@@ -248,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         view.underPageBackgroundColor = .clear
         webView = view
         let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 520), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        panel.title = "token重置"
+        panel.title = "Token重置"
         panel.minSize = NSSize(width: 360, height: 440)
         panel.backgroundColor = .white
         panel.isReleasedWhenClosed = false
@@ -314,7 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
     func emit(_ detail: [String: Any]) {
         lastStatus = detail
-        statusItem.button?.toolTip = "token重置 · " + statusDescription() + " · 左键打开，右键菜单"
+        statusItem.button?.toolTip = "Token重置 · " + statusDescription() + " · 左键打开，右键菜单"
         guard let view = webView, let raw = try? JSONSerialization.data(withJSONObject: detail), let json = String(data: raw, encoding: .utf8) else { return }
         view.evaluateJavaScript("window.__TIBO_DESKTOP_STATUS__ = \(json); window.dispatchEvent(new CustomEvent('tibo:monitor', {detail:window.__TIBO_DESKTOP_STATUS__}));", completionHandler: nil)
     }
@@ -461,7 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                     return
                 }
                 let content = UNMutableNotificationContent()
-                content.title = "token重置 · 测试通知"
+                content.title = "Token重置 · 测试通知"
                 content.body = "通知通道测试，不代表发现重置。关闭观察面板后，菜单栏会继续监控。"
                 self.notifications.add(UNNotificationRequest(identifier: testID, content: content, trigger: nil)) { [weak self] error in
                     DispatchQueue.main.async {

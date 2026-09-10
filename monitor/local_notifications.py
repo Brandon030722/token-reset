@@ -76,7 +76,7 @@ def _current_candidate(store, now):
             source = next(e for e in snapshot["evidence"] if e["id"] in forecast["evidenceIds"])
             candidates.append((event, {
                 "eventId": event["id"], "title": "Codex 重置线索达到提醒线",
-                "body": f"重置信号评分 {forecast['probability48h']:g}/100（不是发生概率）。打开 token重置查看依据。",
+                "body": f"重置信号评分 {forecast['probability48h']:g}/100（不是发生概率）。打开 Token重置查看依据。",
                 "probability48h": forecast["probability48h"], "validUntil": forecast["validUntil"],
                 "windowEndsAt": forecast["windowEndsAt"], "sourceUrl": source["url"],
             }))

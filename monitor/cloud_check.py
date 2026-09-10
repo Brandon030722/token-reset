@@ -25,8 +25,8 @@ def main():
             if not all(re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', x) for x in (recipient, sender)):
                 raise ValueError('Test address missing')
             client.request('POST', '/smtp/email', {
-                'sender': {'name': 'token重置', 'email': sender}, 'to': [{'email': recipient}],
-                'subject': 'token重置 · 云端连接测试（非重置公告）',
+                'sender': {'name': 'Token重置', 'email': sender}, 'to': [{'email': recipient}],
+                'subject': 'Token重置 · 云端连接测试（非重置公告）',
                 'htmlContent': shell('云端已经接力', '这是一封连接测试，不代表发现额度重置。',
                     '<h1 style="font-size:28px;line-height:1.4">电脑休息时，<br>我们继续帮你留意。</h1>'
                     '<p>这封邮件从 GitHub Actions 云端提交，用于验证监控服务的发信连接。</p>'

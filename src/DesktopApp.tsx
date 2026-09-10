@@ -139,7 +139,7 @@ export default function DesktopApp() {
   }
 
   useEffect(() => {
-    document.title = 'token重置';
+    document.title = 'Token重置';
     const onMonitor = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail;
       if (!isStatus(detail)) return;
@@ -214,7 +214,7 @@ export default function DesktopApp() {
 
   return <div className="token-panel" data-ark-theme="popucom" data-ark-depth="moderate">
     <header className="token-header">
-      <div className="token-brand"><span className="brand-mark" aria-hidden="true">T<span>!</span></span><h1>token重置</h1></div>
+      <div className="token-brand"><span className="brand-mark" aria-hidden="true">T<span>!</span></span><h1>Token重置</h1></div>
       <button className="token-mail-shortcut" onClick={() => selectTab('reminders')}>邮件提醒 <Icon name="arrow" /></button>
     </header>
     <div className="token-tabs" role="tablist" aria-label="观察站页面">

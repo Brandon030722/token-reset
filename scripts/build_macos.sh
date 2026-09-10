@@ -4,7 +4,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 PYTHON_BIN="$(command -v python3.12)"
 BUILD_DIR="$PROJECT_DIR/.local/native-build"
-APP_DIR="$PROJECT_DIR/artifacts/token重置.app"
+APP_DIR="$PROJECT_DIR/artifacts/Token重置.app"
 mkdir -p "$BUILD_DIR" "$PROJECT_DIR/artifacts"
 npm run build
 if [ ! -x "$PROJECT_DIR/.local/package312/bin/python" ]; then
@@ -35,10 +35,10 @@ from pathlib import Path
 root = Path(os.environ["STAGING_APP"])
 with (root / "Contents/Info.plist").open("wb") as f:
     plistlib.dump({
-        "CFBundleName": "token重置", "CFBundleDisplayName": "token重置",
+        "CFBundleName": "Token重置", "CFBundleDisplayName": "Token重置",
         "CFBundleIdentifier": "org.tibo-reset.observatory",
         "CFBundleExecutable": "TiboMonitor", "CFBundlePackageType": "APPL",
-        "CFBundleShortVersionString": "0.8.0", "CFBundleVersion": "9",
+        "CFBundleShortVersionString": "0.8.1", "CFBundleVersion": "10",
         "LSUIElement": True,
         "CFBundleIconFile": "AppIcon", "LSMinimumSystemVersion": "13.0",
         "NSHighResolutionCapable": True,

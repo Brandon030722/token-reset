@@ -38,7 +38,7 @@ def shell(title, preview, content, footer):
 <div style="display:none;max-height:0;overflow:hidden;mso-hide:all">{escape(preview)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#f4f7fc"><tr><td align="center" style="padding:28px 12px">
 <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#fff;border:1px solid #e2e8f2;border-radius:22px;overflow:hidden">
-<tr><td bgcolor="#223249" style="padding:23px 26px;border-radius:21px 21px 0 0"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td bgcolor="#ffcf51" style="width:42px;height:42px;text-align:center;border-radius:14px;font-size:27px;font-weight:900;color:#223249">T!</td><td style="padding-left:12px;color:white;font-size:18px;font-weight:bold">token重置<br><span style="font-size:11px;font-weight:normal;color:#c7d8ee;letter-spacing:1px">把值得关注的消息，轻轻送到</span></td></tr></table></td></tr>
+<tr><td bgcolor="#223249" style="padding:23px 26px;border-radius:21px 21px 0 0"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td bgcolor="#ffcf51" style="width:42px;height:42px;text-align:center;border-radius:14px;font-size:27px;font-weight:900;color:#223249">T!</td><td style="padding-left:12px;color:white;font-size:18px;font-weight:bold">Token重置<br><span style="font-size:11px;font-weight:normal;color:#c7d8ee;letter-spacing:1px">把值得关注的消息，轻轻送到</span></td></tr></table></td></tr>
 <tr><td class="mail-content" style="padding:30px 26px 26px;font-size:15px;line-height:1.8">{content}</td></tr>
 <tr><td style="padding:20px 26px;background:#f8faff;border-top:1px solid #e7edf5;border-radius:0 0 21px 21px;font-size:12px;color:#64748b;line-height:1.8">{footer}</td></tr></table>
 <p style="font-size:11px;color:#64748b;margin:16px 0 0">独立开源观察项目 · 与 OpenAI 无关联</p>
@@ -46,7 +46,7 @@ def shell(title, preview, content, footer):
 
 
 def confirmation():
-    return shell('请确认订阅 token重置', '还差最后一步，让值得关注的重置消息找到你。',
+    return shell('请确认订阅 Token重置', '还差最后一步，让值得关注的重置消息找到你。',
         '<p style="margin:0 0 8px;color:#326bbe;font-size:12px;font-weight:bold">欢迎来到观察站</p>'
         '<h1 style="margin:0 0 14px;font-size:29px;line-height:1.35;letter-spacing:-1px">消息来了，<br>我们帮你留意。</h1>'
         '<p style="margin:0 0 22px;color:#53647a">还差最后一步：确认这是你的邮箱。</p>'
@@ -79,5 +79,5 @@ def forecast_email(snapshot, preview=False):
     url = next((source_url(e.get('url', '')) for e in evidence if source_url(e.get('url', ''))), '')
     if url:
         content += '<div style="margin-top:24px">' + button('去看看最新线索', url) + '</div>'
-    return shell('token重置 · 新的重置线索', '重置线索达到提醒线，查看评分、适用范围与原帖。', content,
-                 '你收到这封邮件，是因为已确认订阅 token重置。<br>同一事件只提醒一次。想安静一阵？<a href="{{ unsubscribe }}" style="color:#326bbe;text-decoration:underline">退订提醒</a>。')
+    return shell('Token重置 · 新的重置线索', '重置线索达到提醒线，查看评分、适用范围与原帖。', content,
+                 '你收到这封邮件，是因为已确认订阅 Token重置。<br>同一事件只提醒一次。想安静一阵？<a href="{{ unsubscribe }}" style="color:#326bbe;text-decoration:underline">退订提醒</a>。')

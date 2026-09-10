@@ -78,7 +78,7 @@ def dispatch_brevo(store, snapshot, now, config, client, checkpoint=lambda: None
     try:
         campaign = client.request("POST", "/emailCampaigns", {
             "name": "token-reset:" + event_id, "type": "classic",
-            "sender": {"name": "token重置", "email": config["fromEmail"]},
+            "sender": {"name": "Token重置", "email": config["fromEmail"]},
             "subject": f'Codex 重置观察：信号评分 {snapshot["forecast"]["probability48h"]}/100',
             "htmlContent": render_brevo(snapshot),
             "recipients": {"listIds": [int(config["listId"])]},

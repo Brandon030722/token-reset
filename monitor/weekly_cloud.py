@@ -123,7 +123,7 @@ def content(job):
         '如果之后发生过提前重置或账号变更，请以 Codex 当前显示为准。</p>'
         + button('查看 Codex', 'https://chatgpt.com/codex') +
         '<p style="font-size:12px;color:#64748b">每次开机读取到新的有效时间后，会自动更新下一次提醒。不会自行无限增加七天。</p>',
-        '这是你在 token重置 中启用的个人提醒，不向公共订阅名单群发。<br>在「我的额度」关闭周邮件并同步后，可取消后续预约。')
+        '这是你在 Token重置 中启用的个人提醒，不向公共订阅名单群发。<br>在「我的额度」关闭周邮件并同步后，可取消后续预约。')
 
 
 def free_credit(client):
@@ -145,8 +145,8 @@ def deliver(payload, ledger, client, sender, now, checkpoint):
         checkpoint(ledger)  # MUST be durable remotely before the external effect.
         try:
             response = client.request('POST', '/smtp/email', {
-                'sender': {'name': 'token重置', 'email': sender}, 'to': [{'email': job['email']}],
-                'subject': 'token重置 · '+job['label']+' 每周恢复时间到了', 'htmlContent': content(job)})
+                'sender': {'name': 'Token重置', 'email': sender}, 'to': [{'email': job['email']}],
+                'subject': 'Token重置 · '+job['label']+' 每周恢复时间到了', 'htmlContent': content(job)})
             if not isinstance(response.get('messageId'), str) or not response['messageId']:
                 raise RuntimeError('Unconfirmed mail acceptance')
             ledger[job['id']] = 'submitted'; submitted += 1

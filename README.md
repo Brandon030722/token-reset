@@ -1,8 +1,8 @@
 > 当前邮件方案已改为 Brevo Free，详细步骤见 [Brevo 配置指南](docs/email-brevo.md)。原 MailerLite 实现保留兼容，下面的 MailerLite 说明只适用于旧配置。邀请码为本地内测入口门槛，不是服务端鉴权。
 
-# token重置 / Tibo 观察站
+# Token重置 / Tibo 观察站
 
-本地应用名为 **token重置**，保留原创 T! 图标；网页观察站继续使用原来的名称。
+本地应用名为 **Token重置**，保留原创 T! 图标；网页观察站继续使用原来的名称。
 
 一个独立公益项目：读取 **@thsottiaux** 的公开动态，整理 Codex 额度重置线索，在有界时间内的**信号评分达到 80 分** 时提供 macOS 本机系统通知，或向已确认订阅的用户发送邮件。
 
@@ -95,7 +95,7 @@ macOS 默认以菜单栏插件运行，需要查看时再打开泡姆前端；Wi
 
 系统通知与 Brevo 邮件是两条独立通道：允许本机通知不会启用邮件，邮件配置也不代表本机通知已获系统授权。规则评分未经统计校准，80 分不代表 80% 发生概率。Windows 当前尚未实现对应的系统通知与菜单栏体验。
 
-本地面板使用简洁的 **token重置** 界面：有界时间内的重置信号、采集状态、最近成功时间和折叠证据；保留原图标。网站首页与桌面面板分别渲染。
+本地面板使用简洁的 **Token重置** 界面：有界时间内的重置信号、采集状态、最近成功时间和折叠证据；保留原图标。网站首页与桌面面板分别渲染。
 
 ### macOS 构建与打开
 
@@ -104,10 +104,10 @@ macOS 默认以菜单栏插件运行，需要查看时再打开泡姆前端；Wi
 ~~~sh
 npm ci
 bash scripts/build_macos.sh
-open "artifacts/token重置.app"
+open "artifacts/Token重置.app"
 ~~~
 
-产物为 artifacts/token重置.app 与 artifacts/token-reset-macOS-arm64.zip。打开后查看顶部菜单栏 T!，不会自动弹出窗口。移动时保留完整 .app。包采用本机 ad-hoc 签名，没有付费开发者签名或 Apple 公证；下载分发、通知授权和其他 macOS 版本仍需验证。
+产物为 artifacts/Token重置.app 与 artifacts/token-reset-macOS-arm64.zip。打开后查看顶部菜单栏 T!，不会自动弹出窗口。移动时保留完整 .app。包采用本机 ad-hoc 签名，没有付费开发者签名或 Apple 公证；下载分发、通知授权和其他 macOS 版本仍需验证。
 
 ### Windows 构建与打开
 
@@ -154,7 +154,7 @@ macOS 使用打包 helper，按 .app 实际存放位置调整路径：
 
 ~~~sh
 python3 scripts/install_macos_schedule.py --executable \
-  "/Applications/token重置.app/Contents/Resources/monitor/TiboMonitorHelper"
+  "/Applications/Token重置.app/Contents/Resources/monitor/TiboMonitorHelper"
 ~~~
 
 Windows 源码方式：
@@ -247,4 +247,4 @@ npm test 覆盖 Python 与前端数据协议、真实/演示隔离、过期、�
 
 启用个人云端预约后，本机将实际读取的下一次恢复时间和本人邮箱保存到 GitHub Secret，云端到点单独发邮件，无需等本机重新开机。个人用量和 Codex 登录凭据不上传。界面提供同步状态与关闭按钮；已用额度为 0 的窗口不预约，下一周期需本机重新读取，不能自动假定每七天循环。此模式需要使用者自己的仓库管理权限和 GitHub CLI 登录。详细配置、取消和延迟限制见 [云端与每周额度说明](docs/cloud-and-weekly.md#08-个人周邮件预约)。
 
-应用与菜单栏采用黑底白字 T! 静态图标。macOS 可从 `~/Applications/token重置.app` 打开，或用 Spotlight 搜索“token重置”。
+应用与菜单栏采用黑底白字 T! 静态图标。macOS 可从 `~/Applications/Token重置.app` 打开，或用 Spotlight 搜索“Token重置”。

@@ -33,7 +33,7 @@ public sealed class MainWindow : Window
     public MainWindow(bool dryRun)
     {
         this.dryRun = dryRun;
-        Title = "token重置";
+        Title = "Token重置";
         Width = 760;
         Height = 650;
         MinWidth = 380;
