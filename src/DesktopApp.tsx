@@ -258,7 +258,6 @@ export default function DesktopApp() {
       </section>
       <section role="tabpanel" id="panel-weekly" aria-labelledby="tab-weekly" hidden={tab !== 'weekly'}>
         <div className="token-weekly-heading"><h2>每周额度</h2><span className="token-muted">{weeklyFresh(weekly, now) ? '已连接本机 Codex' : '等待有效读取'}</span></div>
-        <p className="token-muted">按账号实际七天窗口记录恢复时间，到点后提醒你核对额度。</p>
         {!weekly && <p className="token-email-message">安装并登录 Codex 后，点击「立即检查」读取。当前尚无可用的每周额度数据。</p>}
         {weekly && !weeklyFresh(weekly, now) && <p className="token-email-message">当前未取得有效额度。{weekly.windows.length ? '下方为上次记录，暂不确认已恢复。' : '请确认本机 Codex 已登录。'}</p>}
         {weekly?.status === 'ok' && weekly.windows.length === 0 && <p className="token-email-message">接口尚未提供七天额度窗口，暂时无法设置每周提醒。</p>}
@@ -268,14 +267,13 @@ export default function DesktopApp() {
           <p>服务返回恢复时间 <strong>{formatTime(w.resetsAt)}</strong></p>
           {Date.parse(w.resetsAt) <= now && <p className="token-muted">记录时间已到，等待下一次读取确认。</p>}
         </article>)}
-        <p className="token-muted">{weekly?.checkedAt ? '最近读取 ' + formatTime(weekly.checkedAt) + ' · ' : ''}每 15 分钟检查；关机或休眠可能延迟本机提醒。</p>
-        <div className="token-email-message" role="status">
-          <strong>个人周邮件 · {weekly?.cloudMail?.status === 'synced' ? '已同步云端' : weekly?.cloudMail?.status === 'sync-failed' ? '同步失败' : weekly?.cloudMail?.status === 'read-unavailable' ? '等待有效读取' : '未启用'}</strong>
-          <p>{weekly?.cloudMail?.status === 'synced' ? (weekly.cloudMail.nextAt ? `下次预约 ${formatTime(weekly.cloudMail.nextAt)}。关机也会由云端发信，检查和投递可能延迟。` : '暂无待预约的未来时间；已用额度大于 0 且读取到有效时间后自动预约。') : weekly?.cloudMail?.status === 'sync-failed' || weekly?.cloudMail?.status === 'read-unavailable' ? '尚未确认更新或取消成功；之前已同步的预约可能仍会发信。联网后再检查。' : '配置个人云端提醒后，可预约到点邮件。'}</p>
-          {weekly?.cloudMail?.configured && <button disabled={busy} onClick={() => { if (weeklyEmailOnDesktop(!weekly.cloudMail?.enabled)) setNative({ status: 'running' }); }}>{weekly.cloudMail.enabled ? '关闭周邮件' : '启用周邮件'}</button>}
+        <div className="token-weekly-mail" data-state={weekly?.cloudMail?.status || 'disabled'}>
+          <div className="token-weekly-mail-heading"><h3>个人周邮件</h3><span role="status">{weekly?.cloudMail?.status === 'synced' ? '已同步云端' : weekly?.cloudMail?.status === 'sync-failed' ? '同步失败' : weekly?.cloudMail?.status === 'read-unavailable' ? '待同步' : '未开启'}</span></div>
+          {weekly?.cloudMail?.status === 'synced' && weekly.cloudMail.nextAt ? <p className="token-weekly-mail-date"><span>下次提醒</span><time dateTime={weekly.cloudMail.nextAt}>{formatTime(weekly.cloudMail.nextAt)}</time></p> : <p className="token-weekly-mail-note">{weekly?.cloudMail?.status === 'synced' ? '暂无待预约的恢复时间。' : weekly?.cloudMail?.status === 'sync-failed' || weekly?.cloudMail?.status === 'read-unavailable' ? '更新未确认，旧预约可能仍有效。请联网重试。' : weekly?.cloudMail?.configured ? '开启后自动预约到点邮件。' : '配置后可预约个人到点邮件。'}</p>}
+          <div className="token-weekly-mail-actions"><span>{weekly?.cloudMail?.status === 'synced' && weekly.cloudMail.nextAt ? '关机也能收到' : '仅发给你的邮箱'}</span>{weekly?.cloudMail?.configured && <button disabled={busy} onClick={() => { if (weeklyEmailOnDesktop(!weekly.cloudMail?.enabled)) setNative({ status: 'running' }); }}>{weekly.cloudMail.enabled ? '关闭周邮件' : '启用周邮件'}</button>}</div>
         </div>
-        <button className="token-check-button" onClick={check} disabled={busy}> {busy ? '正在检查' : '立即检查'} <Icon name="refresh" /></button>
-        <p className="token-muted">用量与登录信息留在本机；启用周邮件仅同步邮箱和恢复时间，仅发给你。</p>
+        <div className="token-weekly-tools"><span className="token-muted">最近读取 {formatTime(weekly?.checkedAt)}</span><button className="token-check-button" onClick={check} disabled={busy}> {busy ? '正在检查' : '立即检查'} <Icon name="refresh" /></button></div>
+        <details className="token-weekly-details"><summary>提醒说明</summary><p>云端每 15 分钟检查，发信可能延迟；按记录时间提醒，不代表额度已到账。下一周期需本机重新读取；未使用的额度暂不预约。</p><p>仅邮箱和恢复时间同步云端，用量与登录信息留在本机。关闭周邮件需联网同步成功；本机系统通知在关机期间暂停。</p></details>
       </section>
       <section role="tabpanel" id="panel-reminders" aria-labelledby="tab-reminders" hidden={tab !== 'reminders'}>
         <div className="token-reminder-block">
