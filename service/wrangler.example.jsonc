@@ -1,0 +1,10 @@
+{
+  "name": "token-reset-mail",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "observability": {"enabled": false},
+  "triggers": {"crons": ["7,22,37,52 * * * *"]},
+  "d1_databases": [{"binding":"DB","database_name":"token-reset-mail","database_id":"REPLACE_AT_DEPLOYMENT","migrations_dir":"migrations"}],
+  "vars": {"PUBLIC_ORIGIN":"https://REPLACE_AT_DEPLOYMENT.workers.dev","BREVO_LIST_ID":"REPLACE_WITH_NEW_INVITE_ONLY_LIST","BREVO_FROM_EMAIL":"token.reminder03@gmail.com"}
+}

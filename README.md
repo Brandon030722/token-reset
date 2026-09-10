@@ -1,3 +1,5 @@
+> 新版邀请制邮件服务代码已加入 [service](service/README.md)，部署及真实收信验证尚未完成。启用后由云端校验邀请码和邮箱，旧版本地邀请码及公开表单不能作为授权。
+
 > 当前邮件方案已改为 Brevo Free，详细步骤见 [Brevo 配置指南](docs/email-brevo.md)。原 MailerLite 实现保留兼容，下面的 MailerLite 说明只适用于旧配置。邀请码为本地内测入口门槛，不是服务端鉴权。
 
 # Token重置 / Tibo 观察站

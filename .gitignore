@@ -22,3 +22,7 @@ artifacts/
 codex-usage.json
 codex-usage.sqlite3*
 codex-usage.lock
+
+service/wrangler.jsonc
+service/.dev.vars
+service/.wrangler/
