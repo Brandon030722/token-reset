@@ -38,7 +38,7 @@ with (root / "Contents/Info.plist").open("wb") as f:
         "CFBundleName": "token重置", "CFBundleDisplayName": "token重置",
         "CFBundleIdentifier": "org.tibo-reset.observatory",
         "CFBundleExecutable": "TiboMonitor", "CFBundlePackageType": "APPL",
-        "CFBundleShortVersionString": "0.7.0", "CFBundleVersion": "8",
+        "CFBundleShortVersionString": "0.8.0", "CFBundleVersion": "9",
         "LSUIElement": True,
         "CFBundleIconFile": "AppIcon", "LSMinimumSystemVersion": "13.0",
         "NSHighResolutionCapable": True,

@@ -9,5 +9,11 @@
   "apiKey": "",
   "mailProvider": "brevo",
   "listId": "",
-  "maxRecipients": 100
+  "maxRecipients": 100,
+  "weeklyCloud": {
+    "enabled": false,
+    "recipient": "",
+    "repository": "",
+    "ghExecutable": ""
+  }
 }

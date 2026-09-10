@@ -116,15 +116,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let image = NSImage(size: NSSize(width: 19, height: 19), flipped: false) { _ in
             NSColor.black.set()
             let outline = NSBezierPath(roundedRect: NSRect(x: 1, y: 1, width: 17, height: 17), xRadius: 4, yRadius: 4)
-            outline.lineWidth = 1.5
-            outline.stroke()
+            outline.fill()
+            NSColor.white.set()
             NSBezierPath(rect: NSRect(x: 4, y: 12, width: 8, height: 2.3)).fill()
             NSBezierPath(rect: NSRect(x: 7, y: 5, width: 2.3, height: 8)).fill()
             NSBezierPath(roundedRect: NSRect(x: 13.1, y: 8, width: 1.8, height: 6.3), xRadius: 0.7, yRadius: 0.7).fill()
             NSBezierPath(ovalIn: NSRect(x: 13.1, y: 4.7, width: 1.8, height: 1.8)).fill()
             return true
         }
-        image.isTemplate = true
+        image.isTemplate = false
         return image
     }
 
@@ -272,6 +272,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         guard message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.protocol == localScheme,
               message.frameInfo.securityOrigin.host == localHost, let body = message.body as? [String: Any] else { return }
         if body["type"] as? String == "monitor.check" { checkNow() }
+        if body["type"] as? String == "weekly.email", let enabled = body["enabled"] as? Bool {
+            emit(["status": "running"])
+            localCommand(["--weekly-email", enabled ? "on" : "off", "--config", config.path]) { [weak self] result in
+                var detail = result
+                if result["status"] as? String == "unavailable" { detail["status"] = "failed" }
+                self?.emit(detail)
+            }
+        }
         if body["type"] as? String == "notification.authorize" { authorizeNotifications() }
         if body["type"] as? String == "notification.test" { testNotification() }
         if body["type"] as? String == "email.invite.verify", let code = body["code"] as? String {
@@ -375,7 +383,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     func drainLocalQueue() {
         guard worker == nil, !localQueue.isEmpty else { return }
         let (arguments, completion) = localQueue.removeFirst()
-        runHelper(arguments, limit: arguments.contains("--read-codex-usage") ? 30 : 10, completion: completion)
+        runHelper(arguments, limit: arguments.contains("--read-codex-usage") || arguments.contains("--weekly-email") ? 50 : 10, completion: completion)
     }
     func recordNotificationReview(_ result: [String: Any]) {
         if let count = result["needsReview"] as? Int { notificationReviewCount = count }

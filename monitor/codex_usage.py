@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from .feeds import date, stamp
 from .store import Store, atomic_json, process_lock
+from .weekly_cloud import sync as sync_weekly_cloud
 
 WEEK_MINUTES = 7 * 24 * 60
 POLL_SECONDS = 15 * 60
@@ -189,6 +190,9 @@ def refresh(config, directory, now=None):
             previous = store.get('weeklySnapshot') or {}
             attempted = previous.get('attemptedAt')
             if attempted and timedelta(0) <= now-date(attempted) < timedelta(seconds=POLL_SECONDS):
+                cloud = sync_weekly_cloud(config, store, previous, now)
+                atomic_json(directory/'codex-usage.json', {**{k:v for k,v in previous.items() if k != 'accountKey'}, 'cloudMail': cloud})
+                (directory/'codex-usage.json').chmod(0o600)
                 return {'status': 'cooldown', 'weeklyStatus': previous.get('status'), 'nextCheckAt': stamp(date(attempted)+timedelta(seconds=POLL_SECONDS))}
             try:
                 result, account_key = read_local(config)
@@ -199,6 +203,7 @@ def refresh(config, directory, now=None):
                 store.put('weeklySnapshot', snapshot)
             # Identity and outbox are private. The WebView sees quota fields only.
             public = {k:v for k,v in snapshot.items() if k != 'accountKey'}
+            public['cloudMail'] = sync_weekly_cloud(config, store, snapshot, now)
             atomic_json(directory/'codex-usage.json', public)
             for p in (directory/'codex-usage.json', directory/'codex-usage.sqlite3'):
                 p.chmod(0o600)

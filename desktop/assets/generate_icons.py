@@ -12,17 +12,12 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent
 SVG = """<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <title>Tibo 观察站</title>
-  <desc>原创蓝黄圆角徽章，几何字母 T 与感叹号。</desc>
-  <rect x="49" y="60" width="408" height="408" rx="92" fill="#243047"/>
-  <rect x="48" y="44" width="404" height="404" rx="90" fill="#3d91f5" stroke="#243047" stroke-width="12"/>
-  <g transform="rotate(-7 253 251)">
-    <rect x="107" y="119" width="310" height="292" rx="66" fill="#243047"/>
-    <rect x="98" y="105" width="310" height="292" rx="66" fill="#ffce3b" stroke="#243047" stroke-width="10"/>
-    <path d="M149 176H286V225H244V356H191V225H149Z" fill="#243047"/>
-    <path d="M313 176H364L356 294H321Z" fill="#243047"/>
-    <circle cx="338" cy="337" r="25" fill="#243047"/>
-  </g>
+  <title>token重置</title>
+  <desc>黑色圆角方形，白色几何字母 T 与感叹号。</desc>
+  <rect x="48" y="48" width="416" height="416" rx="100" fill="#080808"/>
+  <path d="M139 168H285V216H237V344H187V216H139Z" fill="#fff"/>
+  <path d="M316 168H365L358 284H323Z" fill="#fff"/>
+  <circle cx="340.5" cy="325" r="23" fill="#fff"/>
 </svg>
 """
 
@@ -31,9 +26,8 @@ import AppKit
 import Foundation
 
 let output = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
-let ink = CGColor(red: 36/255, green: 48/255, blue: 71/255, alpha: 1)
-let blue = CGColor(red: 61/255, green: 145/255, blue: 245/255, alpha: 1)
-let yellow = CGColor(red: 255/255, green: 206/255, blue: 59/255, alpha: 1)
+let ink = CGColor(gray: 1, alpha: 1)
+let black = CGColor(gray: 8/255, alpha: 1)
 
 func render(_ size: Int, _ filename: String) throws {
     guard let context = CGContext(
@@ -64,20 +58,12 @@ func render(_ size: Int, _ filename: String) throws {
         context.setFillColor(ink)
         context.fillPath()
     }
-    rect(49, 60, 408, 408, 92, ink)
-    rect(48, 44, 404, 404, 90, blue, 12)
-    context.saveGState()
-    context.translateBy(x: 253, y: 251)
-    context.rotate(by: -7 * .pi / 180)
-    context.translateBy(x: -253, y: -251)
-    rect(107, 119, 310, 292, 66, ink)
-    rect(98, 105, 310, 292, 66, yellow, 10)
-    polygon([(149,176),(286,176),(286,225),(244,225),(244,356),
-             (191,356),(191,225),(149,225)])
-    polygon([(313,176),(364,176),(356,294),(321,294)])
+    rect(48, 48, 416, 416, 100, black)
+    polygon([(139,168),(285,168),(285,216),(237,216),(237,344),
+             (187,344),(187,216),(139,216)])
+    polygon([(316,168),(365,168),(358,284),(323,284)])
     context.setFillColor(ink)
-    context.fillEllipse(in: CGRect(x: 313, y: 312, width: 50, height: 50))
-    context.restoreGState()
+    context.fillEllipse(in: CGRect(x: 317.5, y: 302, width: 46, height: 46))
     guard let image = context.makeImage(),
           let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
     else { fatalError("Cannot encode PNG") }

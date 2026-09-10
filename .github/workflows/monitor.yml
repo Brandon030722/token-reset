@@ -31,6 +31,14 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Deliver saved personal weekly reminders
+        id: weekly
+        continue-on-error: true
+        env:
+          PERSONAL_WEEKLY_SCHEDULE: ${{ secrets.PERSONAL_WEEKLY_SCHEDULE }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          BREVO_FROM_EMAIL: ${{ secrets.BREVO_FROM_EMAIL }}
+        run: python -m monitor.weekly_cloud
       - name: Monitor public timeline
         id: poll
         env:
@@ -51,3 +59,6 @@ jobs:
           BREVO_TEST_RECIPIENT: ${{ secrets.BREVO_TEST_RECIPIENT }}
           SEND_CONNECTION_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.test_email }}
         run: python -m monitor.cloud_check
+      - name: Surface personal mail failures
+        if: always() && steps.weekly.outcome == 'failure'
+        run: exit 1

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { emailOnDesktop, notificationOnDesktop, checkOnDesktop, describeDesktopStatus, type DesktopStatus } from './desktop';
+import { emailOnDesktop, weeklyEmailOnDesktop, notificationOnDesktop, checkOnDesktop, describeDesktopStatus, type DesktopStatus } from './desktop';
 import { demoSnapshot } from './demo';
 import { isFresh, MAX_FRESH_MS, parseSnapshot, statusLabels, type Snapshot } from './domain';
 import { parseWeekly, weeklyFresh, type WeeklyUsage } from './weekly';
@@ -168,7 +168,7 @@ export default function DesktopApp() {
   useEffect(() => {
     if (!busy) return;
     // Native checks time out first; recover the control if the bridge loses its completion event.
-    const timeout = window.setTimeout(() => setNative({ status: 'failed' }), 225_000);
+    const timeout = window.setTimeout(() => setNative({ status: 'failed' }), 245_000);
     return () => window.clearTimeout(timeout);
   }, [busy]);
 
@@ -269,8 +269,13 @@ export default function DesktopApp() {
           {Date.parse(w.resetsAt) <= now && <p className="token-muted">记录时间已到，等待下一次读取确认。</p>}
         </article>)}
         <p className="token-muted">{weekly?.checkedAt ? '最近读取 ' + formatTime(weekly.checkedAt) + ' · ' : ''}每 15 分钟检查；关机或休眠可能延迟本机提醒。</p>
+        <div className="token-email-message" role="status">
+          <strong>个人周邮件 · {weekly?.cloudMail?.status === 'synced' ? '已同步云端' : weekly?.cloudMail?.status === 'sync-failed' ? '同步失败' : weekly?.cloudMail?.status === 'read-unavailable' ? '等待有效读取' : '未启用'}</strong>
+          <p>{weekly?.cloudMail?.status === 'synced' ? (weekly.cloudMail.nextAt ? `下次预约 ${formatTime(weekly.cloudMail.nextAt)}。关机也会由云端发信，检查和投递可能延迟。` : '暂无待预约的未来时间；已用额度大于 0 且读取到有效时间后自动预约。') : weekly?.cloudMail?.status === 'sync-failed' || weekly?.cloudMail?.status === 'read-unavailable' ? '尚未确认更新或取消成功；之前已同步的预约可能仍会发信。联网后再检查。' : '配置个人云端提醒后，可预约到点邮件。'}</p>
+          {weekly?.cloudMail?.configured && <button disabled={busy} onClick={() => { if (weeklyEmailOnDesktop(!weekly.cloudMail?.enabled)) setNative({ status: 'running' }); }}>{weekly.cloudMail.enabled ? '关闭周邮件' : '启用周邮件'}</button>}
+        </div>
         <button className="token-check-button" onClick={check} disabled={busy}> {busy ? '正在检查' : '立即检查'} <Icon name="refresh" /></button>
-        <p className="token-muted">个人额度只保存在本机，与云端的广泛重置邮件分开。</p>
+        <p className="token-muted">用量与登录信息留在本机；启用周邮件仅同步邮箱和恢复时间，仅发给你。</p>
       </section>
       <section role="tabpanel" id="panel-reminders" aria-labelledby="tab-reminders" hidden={tab !== 'reminders'}>
         <div className="token-reminder-block">

@@ -52,6 +52,13 @@ export function notificationOnDesktop(action: 'authorize' | 'test'): boolean {
   return true;
 }
 
+export function weeklyEmailOnDesktop(enabled: boolean): boolean {
+  const bridge = window.webkit?.messageHandlers?.tibo;
+  if (window.__TIBO_DESKTOP__?.platform !== 'macos' || !bridge) return false;
+  bridge.postMessage({ type: 'weekly.email', enabled });
+  return true;
+}
+
 export function emailOnDesktop(message: { type: 'email.invite.verify'; code: string } | { type: 'email.configure'; subscriptionUrl: string } | { type: 'email.subscribe' }): boolean {
   const bridge = window.webkit?.messageHandlers?.tibo;
   if (window.__TIBO_DESKTOP__?.platform !== 'macos' || !bridge) return false;

@@ -117,6 +117,7 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true", help="Collect locally, export draft; never send or commit")
     parser.add_argument("--git-checkpoint", action="store_true", help="Actions only: push durable state before mail")
     parser.add_argument("--read-codex-usage", action="store_true", help="Read local Codex weekly quota; never sends email")
+    parser.add_argument("--weekly-email", choices=['on', 'off'], help="Enable/cancel the configured private cloud schedule")
     parser.add_argument("--weekly", action="store_true", help="Use the private weekly-notification outbox")
     local = parser.add_mutually_exclusive_group()
     local.add_argument("--local-notification-candidate", action="store_true", help="Read local notification candidate without collecting")
@@ -130,10 +131,19 @@ def main(argv=None):
                   "claim" if args.claim_local_notification else
                   "ack" if args.ack_local_notification else
                   "release" if args.release_local_notification else None)
-        if args.read_codex_usage:
+        if args.read_codex_usage or args.weekly_email:
             if action or args.weekly or args.git_checkpoint:
                 raise ValueError("Weekly usage cannot be combined with notification or cloud actions")
             from .codex_usage import refresh
+            if args.weekly_email:
+                path = Path(args.config)
+                private = json.loads(path.read_text())
+                settings = private.get('weeklyCloud', {})
+                if not settings.get('repository') or not settings.get('recipient'):
+                    raise ValueError('Private weekly cloud configuration required')
+                settings['enabled'] = args.weekly_email == 'on'
+                private['weeklyCloud'] = settings
+                atomic_json(path, private); path.chmod(0o600)
             result = refresh(load_config(args.config), Path(args.state).resolve().parent)
         elif action:
             event_id = args.claim_local_notification or args.ack_local_notification or args.release_local_notification
