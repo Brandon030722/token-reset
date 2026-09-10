@@ -1,95 +1,90 @@
-import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
-import { demoSnapshot } from './demo';
-import { isDesktop, checkOnDesktop, describeDesktopStatus, saveDesktopPreference, type DesktopStatus } from './desktop';
-import { isFresh, parseSnapshot, statusLabels, type Snapshot, type ResetEvent } from './domain';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { parseSnapshot, statusLabels, type Snapshot, type ResetEvent } from './domain';
+import { parseHealth, parseSiteConfig, selectSignal, type Health, type SiteConfig } from './site-state';
 const dataBase = import.meta.env.VITE_DATA_BASE_URL || import.meta.env.BASE_URL + 'data/';
-const read = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
-const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} saveDesktopPreference(k, v); };
-const date = (v?: string) => v ? new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(v)) : '尚未明确';
-const time = (v: string) => new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(v));
-function Icon({ name, size = 20 }: { name: 'arrow' | 'mail' | 'check' | 'clock' | 'close' | 'refresh' | 'external' | 'spark'; size?: number }) {
-  const p = { arrow: 'M4 12h16m-6-6 6 6-6 6', mail: 'M3 5h18v14H3z M3 6l9 7 9-7', check: 'm5 12 4 4L19 6', clock: 'M12 7v5l4 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0', close: 'm6 6 12 12M6 18 18 6', refresh: 'M20 7a9 9 0 1 0 1 9M20 3v5h-5', external: 'M14 3h7v7m0-7L10 14M10 3H3v18h18v-7', spark: 'm12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3z' };
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={p[name]} /></svg>;
-}
-function Trend({ data, window }: { data: Snapshot['history']; window: 24 | 48 }) {
-  if (!data.length) return <div className="empty-chart">第一条有效评分到来后，趋势会出现在这里。</div>;
-  const items = data.slice(-24), v = items.map(d => window === 24 ? d.probability24h : d.probability48h);
-  const points = v.map((p, i) => `${36 + i * 564 / Math.max(v.length - 1, 1)},${132 - p * 1.06}`).join(' ');
-  return <div className="trend"><svg viewBox="0 0 636 166" role="img" aria-label={`信号评分趋势，从 ${v[0]} 分到 ${v.at(-1)} 分`}>
-    {[20, 50, 80].map(p => <g key={p}><line x1="36" x2="602" y1={132 - p * 1.06} y2={132 - p * 1.06} stroke={p === 80 ? '#bd691d' : '#d9dfdf'} strokeDasharray={p === 80 ? '6 6' : '0'} /><text x="0" y={137 - p * 1.06} fill="#636b74" fontSize="12">{p}</text></g>)}
-    <polygon points={`36,132 ${points} ${v.length === 1 ? 36 : 600},132`} fill="#dcecff" /><polyline points={points} fill="none" stroke="#246ace" strokeWidth="3" strokeLinejoin="round" /><circle cx={v.length === 1 ? 36 : 600} cy={132 - v.at(-1)! * 1.06} r="6" fill="#ffcc32" stroke="#26314a" strokeWidth="2" /><text x="36" y="158" fill="#636b74" fontSize="12">{time(items[0].at)}</text><text x="602" y="158" textAnchor="end" fill="#636b74" fontSize="12">{time(items.at(-1)!.at)}</text>
-  </svg></div>;
+const tabs = [{ id: 'overview', label: '概览' }, { id: 'activity', label: '动态' }, { id: 'mail', label: '邮件' }, { id: 'download', label: '下载' }] as const;
+type Tab = typeof tabs[number]['id'];
+const currentTab = (): Tab => tabs.find(t => '#' + t.id === window.location.hash)?.id ?? 'overview';
+const formatTime = (value?: string) => value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value)) : '尚未成功';
+function Arrow() { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6" /></svg>; }
+function EventCard({ event, snapshot }: { event: ResetEvent; snapshot: Snapshot }) {
+  return <article className="event-card"><div className="event-meta"><span className={event.type === 'limited-reset' ? 'scope limited' : 'scope'}>{event.type === 'limited-reset' ? '限定人群' : event.type === 'credit-grant' ? '重置机会' : '广泛重置'}</span><time dateTime={event.announcedAt}>{formatTime(event.announcedAt)}</time></div>
+    <h3>{event.title}</h3><p>{event.scope}</p><p className="muted">{event.reviewRequired ? '上下文待核验' : event.status === 'confirmed' ? '原帖宣布完成 · 请核对实际到账' : statusLabels[event.status]}</p>
+    <details><summary>查看依据与原帖</summary>{snapshot.evidence.filter(e => event.evidenceIds.includes(e.id)).map(e => <div className="evidence" key={e.id}><p>{e.text}</p><a href={e.url} target="_blank" rel="noopener noreferrer">查看原帖 ↗</a></div>)}</details></article>;
 }
 export default function App() {
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null), [demo, setDemo] = useState(true), [loading, setLoading] = useState(true), [loadError, setLoadError] = useState('');
-  const window = 48;
-  const [view, setView] = useState<'overview' | 'history' | 'method'>('overview'), [selected, setSelected] = useState<ResetEvent | null>(null);
-  const [desktopBusy, setDesktopBusy] = useState(false), [desktopStatus, setDesktopStatus] = useState('自动检查已开启 · 每 15 分钟一次');
-  const [health, setHealth] = useState<{ status: string; source?: string; posts?: number; attemptedAt?: string } | null>(null);
-  const hasLoadedLive = useRef(false);
-  const [subscriptionUrl, setSubscriptionUrl] = useState(''), [consent, setConsent] = useState(false), [subscribeMessage, setSubscribeMessage] = useState('');
-  const [personalTime, setPersonalTime] = useState(read('reset:personalTime') || ''), [plan, setPlan] = useState(read('reset:plan') || 'Plus'), [saved, setSaved] = useState(false), [now, setNow] = useState(Date.now());
-  const subscribeDialog = useRef<HTMLDialogElement>(null), eventDialog = useRef<HTMLDialogElement>(null);
-  const data = demo ? demoSnapshot : snapshot, fresh = data && (demo || (isFresh(data, now) && health?.status === 'ok' && health.attemptedAt === data.checkedAt)), f = data?.forecast;
-  const fFresh = f && (demo || (f.method === 'rules-v2' && Date.parse(f.windowEndsAt) > now && Date.parse(f.validUntil) > now && Date.parse(f.generatedAt) <= now && now - Date.parse(f.generatedAt) < 3600_000));
-  const probability = fresh && fFresh && f ? f.probability48h : null;
-  const event = data?.events.find(e => e.id === f?.eventId), confirmed = data?.events.filter(e => e.status === 'confirmed') || [];
-  async function refresh(switchToLive = true) {
-    setLoading(true); setLoadError('');
-    try { const h = await fetch(`${dataBase}health.json?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null); setHealth(h && ['ok', 'unavailable'].includes(h.status) ? h : null); const r = await fetch(`${dataBase}snapshot.json?t=${Date.now()}`, { cache: 'no-store' }); if (!r.ok) throw Error(); const s = parseSnapshot(await r.json()); if (s.mode !== 'live') throw Error(); setSnapshot(s); if (switchToLive || (isDesktop && !hasLoadedLive.current)) setDemo(false); hasLoadedLive.current = true; }
-    catch { setLoadError('本次未取得新的实时数据。请检查采集状态，历史记录不会被当作新消息。'); }
-    finally { setLoading(false); }
-  }
+  const [tab, setTab] = useState<Tab>(currentTab);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [config, setConfig] = useState<SiteConfig | null>(null);
+  const [configFailed, setConfigFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [readFailed, setReadFailed] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const sequence = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+  const refresh = useCallback(async () => {
+    const seq = ++sequence.current;
+    controller.current?.abort();
+    const request = new AbortController(); controller.current = request;
+    setLoading(true);
+    const timeout = window.setTimeout(() => request.abort(), 15_000);
+    const read = async (name: string) => {
+      const response = await fetch(`${dataBase}${name}.json?t=${Date.now()}`, { cache: 'no-store', signal: request.signal });
+      if (!response.ok) throw Error('Data unavailable');
+      return response.json() as Promise<unknown>;
+    };
+    try {
+      const [h, s] = await Promise.allSettled([read('health').then(parseHealth), read('snapshot').then(v => {
+        const parsed = parseSnapshot(v); if (parsed.mode !== 'live') throw Error('Live data required'); return parsed;
+      })]);
+      if (seq !== sequence.current) return;
+      setHealth(h.status === 'fulfilled' ? h.value : null);
+      if (s.status === 'fulfilled') setSnapshot(s.value);
+      setReadFailed(h.status === 'rejected' || s.status === 'rejected');
+      setNow(Date.now()); setLoading(false);
+    } finally { clearTimeout(timeout); }
+  }, []);
   useEffect(() => {
     void refresh();
-    fetch(import.meta.env.BASE_URL + 'config.json').then(r => r.json()).then(c => { if (typeof c.subscriptionUrl === 'string' && c.subscriptionUrl.startsWith('https://')) setSubscriptionUrl(c.subscriptionUrl); }).catch(() => {});
-    const onMonitor = (event: Event) => {
-      const detail = (event as CustomEvent<DesktopStatus>).detail;
-      if (!detail || !['running', 'ok', 'cooldown', 'source-unavailable', 'failed', 'paused'].includes(detail.status)) return;
-      setDesktopBusy(detail.status === 'running');
-      setDesktopStatus(describeDesktopStatus(detail));
-      if (detail.status !== 'running') void refresh(false);
-    };
-    const onVisible = () => { if (!document.hidden) { setNow(Date.now()); void refresh(false); } };
-    globalThis.addEventListener('tibo:monitor', onMonitor);
-    if (globalThis.window.__TIBO_DESKTOP_STATUS__) onMonitor(new CustomEvent('tibo:monitor', { detail: globalThis.window.__TIBO_DESKTOP_STATUS__ }));
-    document.addEventListener('visibilitychange', onVisible);
-    const id = globalThis.setInterval(() => { if (!document.hidden) setNow(Date.now()); }, isDesktop ? 60_000 : 30_000);
-    const poll = isDesktop ? undefined : globalThis.setInterval(() => { if (!document.hidden) void refresh(false); }, 300_000);
-    return () => { globalThis.clearInterval(id); globalThis.clearInterval(poll); globalThis.removeEventListener('tibo:monitor', onMonitor); document.removeEventListener('visibilitychange', onVisible); };
-  }, []);
-  function requestRefresh() {
-    if (!isDesktop) { void refresh(); return; }
-    if (checkOnDesktop()) { setDesktopBusy(true); setDesktopStatus('正在检查公开动态…'); }
-    else setDesktopStatus('无法启动检查，请重新打开应用。');
-  }
-  const openSubscribe = () => { setSubscribeMessage(''); subscribeDialog.current?.showModal(); };
-  const openEvent = (e: ResetEvent) => { setSelected(e); eventDialog.current?.showModal(); };
-  function subscribe(e: FormEvent) { e.preventDefault(); if (!subscriptionUrl) { setSubscribeMessage('订阅服务还没有连接。此操作没有提交邮箱，也不会发送邮件。'); return; } globalThis.open(subscriptionUrl, '_blank', 'noopener,noreferrer'); setSubscribeMessage('已打开邀请订阅页面，请填写邀请码并确认邮箱。'); }
-  const status = !demo && (!data || !fresh) ? '等待新数据' : f ? statusLabels[f.status] : '暂无明确线索';
-  const collectionLabel = health?.status === 'unavailable' ? '采集暂时不可用' : !snapshot ? '等待首次采集' : !fresh ? '数据已过期' : '采集正常';
-  const collectionNote = !snapshot ? '完成首次采集后，这里会显示真实结果。' : !fresh ? '暂不显示当前评分，历史记录仍可查看。' : !f ? '已读取' + (Number.isInteger(health?.posts) ? ' ' + health?.posts + ' 条' : '') + '公开动态，暂未发现符合条件的重置线索。评分显示“—”属于正常状态。' : '每 15 分钟尝试检查一次，有变化才值得打扰你。';
-  return <>
-    <a className="skip" href="#main">跳到主要内容</a>
-    <header className="topbar"><div className="top-inner"><button className="brand" onClick={() => setView('overview')} aria-label="Tibo 观察站首页"><span className="brand-mark">T<span>!</span></span><span>Tibo 观察站<small>RESET OBSERVATORY</small></span></button><nav aria-label="主导航">{([['overview', '重置雷达'], ['history', '事件档案'], ['method', '我们怎么算']] as const).map(([v, title]) => <button key={v} className={view === v ? 'nav-active' : ''} onClick={() => setView(v)} aria-current={view === v ? 'page' : undefined}>{title}</button>)}</nav><button className="button yellow header-subscribe" onClick={openSubscribe}><Icon name="mail" />订阅提醒</button></div></header>
-    <main id="main" className="page">{isDesktop && <div className="desktop-status" role="status"><span className="desktop-badge">本地应用</span><span>{desktopStatus}</span><small>{globalThis.window.__TIBO_DESKTOP__?.platform === 'macos' ? '关闭面板继续监控 · 右键菜单栏图标可退出' : '界面随应用加载 · 关闭窗口后停止监控'}</small></div>}<div className={`notice ${demo ? 'demo' : !fresh ? 'outdated' : ''}`} role="status"><span>{demo ? '演示模式' : collectionLabel}</span><p>{demo ? '先逛一逛。以下数值和记录用于展示，不会触发邮件。' : collectionNote}</p><button onClick={() => { if (demo && snapshot) setDemo(false); else if (!demo) setDemo(true); else { setDemo(false); void refresh(); } }} disabled={loading}>{demo ? '查看实时' : '体验演示'}<Icon name="arrow" size={15} /></button></div>
-      {view === 'overview' && <><div className="page-title"><div><p className="eyebrow">A LITTLE HOPE, WITH EVIDENCE.</p><h1>今天，重置有戏吗<span className="question">?</span></h1></div><button className="text-button refresh" onClick={requestRefresh} disabled={loading || desktopBusy}><Icon name="refresh" />{loading || desktopBusy ? '正在检查' : isDesktop ? '立即检查' : '刷新消息'}</button></div>
-        <div className="dashboard"><section className="forecast-card" aria-labelledby="forecast-title"><div className="card-top"><span className="pill blue">{status}</span><span className="small-label">观察上限 48 小时</span></div>
-          <div className="forecast-body"><div className="probability"><p id="forecast-title">重置信号评分</p><div className="number">{probability ?? '—'}<span>{probability !== null ? '/100' : ''}</span><i><Icon name="spark" size={34} /></i></div><p className="estimate-label">{demo ? '演示数值' : probability === null ? (!demo && fresh ? '暂无有效线索，暂不估计' : '等待有效数据，暂不估计') : '信号强度 · 不是发生概率'}</p></div><div className="forecast-copy"><span className="small-label">观察结论</span><h2>{probability === null ? (!demo && fresh ? '还没有新的重置线索。' : '等待下一次有效检查。') : probability >= 80 ? '有消息了，再等一个实锤。' : '有一点动静，继续保持观察。'}</h2><p>{f?.summary || '只有取得有效公开线索后，才会生成信号评分。没有消息，也是一种正常状态。'}</p></div></div>
-          <div className="chart-header"><span>信号评分变化</span><span className="legend"><i />虚线为 80 分邮件提醒线</span></div><Trend data={data?.history.filter(point => point.eventId === f?.eventId) || []} window={window} /><div className="card-bottom"><span><Icon name="clock" size={16} />{demo ? '示例记录' : '上次成功检查'} · {date(data?.checkedAt)}</span><button className="text-button" onClick={() => setView('method')}>查看依据 <Icon name="arrow" size={16} /></button></div></section>
-          <aside className="subscribe-card"><div className="mail-symbol"><Icon name="mail" size={36} /></div><p className="eyebrow">GOOD NEWS, IN YOUR INBOX.</p><h2>到 <span>80 分</span>，<br />我们喊你。</h2><p>不用反复刷新。有界时间内的重置信号评分达到提醒线，就给你寄一封信。</p><div className="threshold-track"><div /><span>80 分</span></div><div className="threshold-labels"><span>继续观察</span><span>邮件提醒</span></div><button className="button navy" onClick={openSubscribe}>有消息叫我 <Icon name="arrow" /></button><ul className="mini-list"><li><Icon name="check" size={16} />同一事件只提醒一次</li><li><Icon name="check" size={16} />确认订阅后接收，随时退订</li></ul><p className="small-text">{subscriptionUrl ? '邀请码验证后，由云端统一发信' : '订阅通道尚未开放 · 可查看流程'}</p></aside></div>
-          <section className="event-section"><div className="section-title"><h2>这次消息，走到哪了？</h2><button className="text-button" onClick={() => setView('history')}>全部事件 <Icon name="arrow" size={16} /></button></div>{event ? <div className="event-strip"><div className="event-summary"><span className="pill pale">{event.type === 'credit-grant' ? '赠送重置机会' : '额度重置'}</span><h3>{event.title}</h3><p>{event.scope}</p></div><ol className="stage-track">{['出现线索', '明确承诺', '确认完成'].map((title, i) => { const n = event.status === 'confirmed' ? 2 : event.status === 'promised' ? 1 : 0; return <li className={i <= n ? 'done' : ''} key={title}><span>{i < n ? <Icon name="check" size={16} /> : i + 1}</span><strong>{title}</strong></li>; })}</ol><button className="button white" onClick={() => openEvent(event)}>打开事件 <Icon name="arrow" size={17} /></button></div> : <div className="empty-panel">还没有可展示的事件。相关线索会在采集成功后归档。</div>}</section>
-          <div className="lower-grid"><section className="note-card"><span className="eyebrow">LAST RESET</span><h2>上一次，好消息是…</h2><p className="last-date">{date(confirmed[0]?.confirmedAt)}</p><p>{confirmed[0] ? `${confirmed[0].title}。预告与完成公告只计为同一件事。` : '目前还没有识别到明确完成公告。'}</p>{confirmed[0] && <button className="text-button" onClick={() => openEvent(confirmed[0])}>看这次记录 <Icon name="arrow" size={16} /></button>}</section><section className="note-card personal"><span className="eyebrow">MY NEXT BREAK</span><h2>也别忘了，你自己的恢复时间。</h2><details><summary>设置我的恢复时间 <span>只保存在这台设备</span></summary><form onSubmit={e => { e.preventDefault(); save('reset:personalTime', personalTime); save('reset:plan', plan); setSaved(true); }}><label>当前套餐<select value={plan} onChange={e => { setPlan(e.target.value); setSaved(false); }}>{['Plus', 'Pro', 'Business', '其他'].map(p => <option key={p}>{p}</option>)}</select></label><label>客户端显示的正常恢复时间<input type="datetime-local" value={personalTime} onChange={e => { setPersonalTime(e.target.value); setSaved(false); }} required /></label><button className="button white" type="submit">保存</button><span role="status">{saved ? '已保存在本机' : ''}</span></form></details>{personalTime && Number.isFinite(Date.parse(personalTime)) && <p className="personal-saved">{plan} · {date(new Date(personalTime).toISOString())}（手动记录）</p>}</section></div></>}
-      {view === 'history' && <section><div className="page-title"><div><p className="eyebrow">ONE EVENT. THE WHOLE STORY.</p><h1>好消息档案</h1></div><span className="pill yellow">{data?.events.length || 0} 个事件</span></div><p className="intro">每次重置只占一张卡，预告、修正和完成都留在一起。</p><div className="archive">{data?.events.map(e => <button className="archive-card" key={e.id} onClick={() => openEvent(e)}><span className={`pill ${e.status === 'confirmed' ? 'yellow' : 'blue'}`}>{statusLabels[e.status]}</span><h2>{e.title}</h2><p>{e.scope}</p><div><span>{date(e.confirmedAt || e.announcedAt)}</span><span>{e.evidenceIds.length} 条线索 <Icon name="arrow" size={17} /></span></div></button>)}</div>{!data?.events.length && <div className="empty-panel">采集到的第一条相关线索，会从这里开始。</div>}</section>}
-      {view === 'method' && <section><div className="page-title"><div><p className="eyebrow">A LITTLE LESS GUESSWORK.</p><h1>把依据，摊开来说。</h1></div></div><div className="method-grid">{[
-        ['先看消息，再下结论','通过第三方 RSS 读取公开推文。转述、玩笑、个人周期恢复，不等于一次新的全局重置。回复缺少上下文时，不会自动升到邮件提醒线。'],
-        ['80 分是提醒线','80 分是人为设置的提醒门槛，不是 80% 发生概率。新版 85 分要求同一段原文同时具备 Codex 重置、明确承诺、广泛范围和有界时间；不按推文数量叠加。'],
-        ['同一件事，只记一次','预告与后续确认会尽量合并。同一事件只触发一次提醒。被撤回、已完成或数据过期的预测不会发送新的提醒；模糊关系留待核验。'],
-        ['不确定，就说不确定','来源失效时保留历史并显示过期。镜像无法保证真实性和完整覆盖。当前没有足够样本宣称命中率。']
-      ].map(([title, body], i) => <article key={title}><span className="method-number">0{i + 1}</span><h2>{title}</h2><p>{body}</p></article>)}</div><div className="method-footer"><h2>你的邮箱，不会写进公开仓库。</h2><p>订阅通过 Brevo 的确认表单完成，名单与退订状态由它管理。提醒邮件包含时间窗口、依据和退订入口。网页无账户登录，也不读取你的 Codex 额度。</p><button className="button yellow" onClick={openSubscribe}>查看订阅流程 <Icon name="mail" /></button></div></section>}
-      {loadError && <p className="inline-error" role="status">{loadError}</p>}<footer><span><b>Tibo 观察站</b> · 独立公益项目</span><span>非 OpenAI 官方服务 · 时间按设备时区显示</span><button onClick={() => setView('method')}>信息与方法 <Icon name="external" size={14} /></button></footer></main>
-    <dialog aria-label="订阅提醒" ref={subscribeDialog} className="dialog" onClick={e => { if (e.target === e.currentTarget) subscribeDialog.current?.close(); }}><button className="dialog-close" aria-label="关闭订阅窗口" onClick={() => subscribeDialog.current?.close()}><Icon name="close" /></button><span className="pill yellow">只在值得关注时打扰</span><h2>好消息，送到邮箱。</h2><p>有界时间内的重置信号评分达到 80 分时接收提醒。同一事件一次，每封邮件都可以退订。</p><ol className="subscribe-steps"><li><span>1</span>填写邀请码和收件邮箱</li><li><span>2</span>点击确认邮件里的订阅链接</li><li><span>3</span>等待有依据的重置提醒</li></ol><form onSubmit={subscribe}><label className="check-label"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} required /><span>我愿意接收重置预测提醒，知道预测不保证发生。</span></label><button className="button navy full" disabled={!consent} type="submit">{subscriptionUrl ? '前往确认订阅' : '检查订阅通道'} <Icon name="external" size={18} /></button><p role="status" className="form-message">{subscribeMessage || (!subscriptionUrl ? '邀请服务准备中，看板可照常使用。' : '将打开云端邀请验证页面。')}</p></form></dialog>
-    <dialog aria-label="事件证据" ref={eventDialog} className="dialog event-dialog" onClick={e => { if (e.target === e.currentTarget) eventDialog.current?.close(); }}><button className="dialog-close" aria-label="关闭事件窗口" onClick={() => eventDialog.current?.close()}><Icon name="close" /></button>{selected && <><span className="pill blue">{statusLabels[selected.status]}</span><h2>{selected.title}</h2><p>{selected.scope}</p>{demo && <p className="demo-label">以下为示例摘要与示例时间，不作为实时重置证据。</p>}<div className="event-times"><div><span>预告</span><b>{date(selected.announcedAt)}</b></div><div><span>观察截止</span><b>{date(selected.expectedAt)}</b></div></div><div className="evidence-list">{data?.evidence.filter(e => selected.evidenceIds.includes(e.id)).map(e => <article key={e.id}><div><strong>{e.author}</strong><time>{date(e.postedAt)}</time></div><h3>{e.summary}</h3><p>{e.text}</p><a href={e.url} target="_blank" rel="noopener noreferrer">{demo ? '相关公开帖链接' : '查看原帖'} <Icon name="external" size={15} /></a></article>)}</div></>}</dialog>
-  </>;
+    const request = new AbortController();
+    const timeout = window.setTimeout(() => request.abort(), 15_000);
+    let active = true;
+    fetch(import.meta.env.BASE_URL + 'config.json', { cache: 'no-store', signal: request.signal }).then(r => { if (!r.ok) throw Error(); return r.json(); }).then(parseSiteConfig)
+      .then(c => { if (active) setConfig(c); }).catch(() => { if (active) setConfigFailed(true); }).finally(() => clearTimeout(timeout));
+    const visible = () => { if (!document.hidden) { setNow(Date.now()); void refresh(); } };
+    const hash = () => setTab(currentTab());
+    const clock = window.setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 30_000);
+    const poll = window.setInterval(() => { if (!document.hidden) void refresh(); }, 300_000);
+    document.addEventListener('visibilitychange', visible); window.addEventListener('hashchange', hash);
+    return () => { active = false; ++sequence.current; controller.current?.abort(); request.abort(); clearTimeout(timeout); clearInterval(clock); clearInterval(poll); document.removeEventListener('visibilitychange', visible); window.removeEventListener('hashchange', hash); };
+  }, [refresh]);
+  useEffect(() => { document.title = `Token重置 · ${tabs.find(t => t.id === tab)!.label}`; }, [tab]);
+  const select = (next: Tab) => { setTab(next); window.history.replaceState(null, '', '#' + next); };
+  const signal = selectSignal(snapshot, health, readFailed, now);
+  const unavailable = readFailed || health?.status === 'unavailable';
+  const state = unavailable ? '采集暂不可用' : !snapshot ? '等待首次检查' : !signal.fresh ? '数据待更新' : '采集正常';
+  const title = signal.score !== null ? signal.reachesThreshold ? '出现明确重置线索' : '还需要更多线索' : unavailable ? '暂时无法判断' : !snapshot ? '等待首次有效检查' : !signal.fresh ? '等待新数据' : '暂无广泛重置预告';
+  const description = signal.summary ?? (unavailable ? '本轮未取得有效结果，历史动态仍可查看。' : !signal.fresh ? '取得新的有效数据后，才会显示当前评分。' : '已读取公开动态，目前没有符合条件的广泛重置预告。');
+  const events = [...(snapshot?.events ?? [])].sort((a, b) => Date.parse(b.announcedAt ?? '') - Date.parse(a.announcedAt ?? ''));
+  return <div className="site" data-ark-theme="popucom" data-ark-depth="moderate">
+    <a className="skip" href="#content">跳到主要内容</a>
+    <header className="masthead"><div className="masthead-inner"><a className="brand" href="#overview" onClick={() => select('overview')}><img src={import.meta.env.BASE_URL + 'favicon.svg'} width="44" height="44" alt="" /><span>Token重置<small>有消息，再提醒。</small></span></a><button className="header-action" onClick={() => select('download')}>获取桌面版 <Arrow /></button></div></header>
+    <div className="workspace"><nav className="tabs" role="tablist" aria-label="观察站页面">{tabs.map((item, index) => <button key={item.id} id={'tab-' + item.id} role="tab" aria-selected={tab === item.id} aria-controls={'panel-' + item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => select(item.id)} onKeyDown={e => {
+      const next = e.key === 'ArrowRight' ? (index + 1) % tabs.length : e.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1;
+      if (next >= 0) { e.preventDefault(); select(tabs[next].id); document.getElementById('tab-' + tabs[next].id)?.focus(); }
+    }}>{item.label}</button>)}</nav>
+    <main id="content" tabIndex={-1}>
+      <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden={tab !== 'overview'}>
+        <div className="section-heading"><div><p className="eyebrow">公开消息 · 观察上限 48 小时</p><h1>重置，等一个明确信号。</h1></div><button className="quiet-button" onClick={() => void refresh()} disabled={loading}>{loading ? '正在读取…' : '刷新数据'} <span aria-hidden="true">↻</span></button></div>
+        <div className="overview-grid"><article className="signal-card"><div className="card-heading"><span>重置信号评分</span><span className={'status ' + (signal.fresh ? 'healthy' : '')} role="status">{state}</span></div><div className="score" aria-label={signal.score === null ? '暂无有效评分' : `重置信号评分 ${signal.score} 分`}>{signal.score ?? '—'}{signal.score !== null && <small>/ 100</small>}</div><h2>{title}</h2><p className="signal-description">{description}</p><div className="score-rule"><strong>80 分提醒线</strong><span>信号强度，不是发生概率</span></div><div className="read-status"><span>最近成功检查 <time dateTime={snapshot?.checkedAt}>{formatTime(snapshot?.checkedAt)}</time></span>{health?.status === 'ok' && signal.fresh && health.posts !== undefined && <span>{health.posts} 条公开动态</span>}</div></article>
+          <aside className="mail-preview"><span className="mail-glyph" aria-hidden="true">✉</span><p className="eyebrow">邮件提醒</p><h2>有值得关注的消息，<br />就寄一封信。</h2><p>凭邀请码订阅。由云端监控和发信，电脑关机也能收到。</p><button className="primary-button" onClick={() => select('mail')}>开启邮件提醒 <Arrow /></button><span className="muted">同一事件一次 · 随时退订</span></aside></div>
+        {events[0] && snapshot && <div className="recent"><div className="section-heading compact"><h2>最近动态</h2><button className="quiet-button" onClick={() => select('activity')}>查看全部 <Arrow /></button></div>{!signal.fresh && <p className="muted">以下为历史记录，当前状态待更新。</p>}<EventCard event={events[0]} snapshot={snapshot} /></div>}
+        <details className="method"><summary>80 分怎么算？</summary><div className="method-grid"><div><h3>同一段原文，四个条件</h3><p>明确提到 Codex 重置、明确承诺、广泛适用范围和有界时间，才可能达到提醒线；不会靠推文数量叠加分数。</p></div><div><h3>过期、撤回，就停止判断</h3><p>有效数据超过一小时、消息已完成或已撤回时，不再展示当前评分。回复缺少上下文时不会自动升级为邮件提醒。</p></div><div><h3>小范围消息，单独标注</h3><p>限定人群的重置或补偿会出现在「动态」。桌面版可发送本机通知；公共邮件目前提醒广泛重置信号。</p></div><div><h3>保留不确定性</h3><p>信息来自第三方公开镜像，可能遗漏或延迟。80 分是规则门槛，未经命中率校准，不代表 80% 的发生概率。</p></div></div></details>
+      </section>
+      <section id="panel-activity" role="tabpanel" aria-labelledby="tab-activity" hidden={tab !== 'activity'}><div className="section-heading"><div><p className="eyebrow">@thsottiaux · 公开消息</p><h1>动态与依据</h1></div><span className="count">{events.length} 个事件</span></div>{!signal.fresh && <p className="notice">{snapshot ? '以下是历史记录，尚未确认当前状态。' : loading ? '正在读取公开动态…' : '暂无可用动态，请稍后刷新。'}</p>}<div className="events">{snapshot && events.map(event => <EventCard key={event.id} event={event} snapshot={snapshot} />)}</div>{signal.fresh && !events.length && <p className="empty">已完成检查，暂未发现符合条件的重置消息。</p>}</section>
+      <section id="panel-mail" role="tabpanel" aria-labelledby="tab-mail" hidden={tab !== 'mail'}><div className="section-heading"><div><p className="eyebrow">凭邀请开启</p><h1>好消息，送进你的邮箱。</h1></div></div><div className="mail-layout"><article className="invitation-card"><h2>与你的桌面版，用同一套订阅。</h2><p>无需准备发件邮箱，也不需要配置邮件服务。</p><ol className="steps"><li><span>1</span><div><strong>填写邮箱和邀请码</strong><p>邀请码向邀请人获取，免费查看看板无需邀请码。</p></div></li><li><span>2</span><div><strong>点击邮件中的确认按钮</strong><p>确认邮箱属于你，才会开启邮件提醒。</p></div></li><li><span>3</span><div><strong>有明确信号，再收到提醒</strong><p>由 Token重置统一发信，每封提醒邮件都可退订。</p></div></li></ol>{config ? <a className="primary-button" href={config.subscriptionUrl} target="_blank" rel="noopener noreferrer">验证邀请码并订阅 <Arrow /></a> : <p className="notice" role="status">{configFailed ? '订阅入口暂时无法读取，请刷新页面重试。' : '正在读取订阅入口…'}</p>}<p className="muted">将在新的页面完成验证。已订阅的邮箱无需重复订阅。</p></article><aside className="mail-rules"><h2>你会收到什么？</h2><div><h3>公共重置消息</h3><p>广泛重置信号评分达到 80 分时提醒，同一事件一次。</p></div><div><h3>你自己的每周恢复提醒</h3><p>在桌面版读取 Codex 后单独开启。已同步的时间由云端预约，关机也能收到。</p><button className="quiet-button" onClick={() => select('download')}>获取桌面版 <Arrow /></button></div><details><summary>管理订阅与隐私</summary><p>通过邮件底部的退订入口或桌面版「提醒」管理订阅。退订会关闭公共邮件和个人预约。</p><p>邮箱与订阅状态由私有云端服务管理，不写入公开仓库。网页不读取你的 Codex 登录信息或额度。</p></details></aside></div></section>
+      <section id="panel-download" role="tabpanel" aria-labelledby="tab-download" hidden={tab !== 'download'}><div className="section-heading"><div><p className="eyebrow">菜单栏 / 托盘常驻</p><h1>把提醒，放到桌面上。</h1></div>{config && <span className="version">v{config.desktopVersion}</span>}</div><p className="download-intro">点击 T! 打开看板，关闭面板后继续监控。</p><div className="downloads">{([{name:'macOS',detail:'Apple 芯片 · M1 及更新机型',url:config?.macDownloadUrl,instruction:'解压后，将 Token重置.app 放入「应用程序」并打开。',symbol:'M'},{name:'Windows',detail:'Intel / AMD · 64 位',url:config?.windowsDownloadUrl,instruction:'解压整个目录，双击 TiboMonitor.exe；保留同目录的其他文件。',symbol:'W'}]).map(platform => <article className="download-card" key={platform.name}><span className="platform-mark" aria-hidden="true">{platform.symbol}</span><h2>{platform.name}</h2><p>{platform.detail}</p>{platform.url ? <a className="primary-button" href={platform.url}>下载 {platform.name} 版 <Arrow /></a> : <p className="notice">{configFailed ? '下载入口读取失败，请刷新重试。' : '正在读取下载入口…'}</p>}<p className="install-note">{platform.instruction}</p></article>)}</div><div className="desktop-features"><span>每 15 分钟检查</span><span>独立四页看板</span><span>本机系统通知</span><span>每周额度与云端预约</span></div><details className="method"><summary>安装与使用说明</summary><p>更新前先退出旧版本再替换。Windows 包已包含 .NET，无需安装 Python 或 Node.js；缺少系统 WebView2 时会提示官方安装入口。Windows 图标可能位于任务栏隐藏图标区域。</p><p>个人额度需要本机 Codex 已安装并登录，Windows 暂不直接读取 WSL 内的 Codex。下一周期需要本机重新读取恢复时间，不会自动假定每七天循环。</p><p>系统通知是否显示取决于通知权限和勿扰设置。到点邮件表示记录的时间已到，不保证额度已到账。</p>{config && <a href={config.releaseUrl} target="_blank" rel="noopener noreferrer">查看完整发布说明 ↗</a>}</details></section>
+    </main><footer><span>Token重置 · 独立公益项目</span><span>非 OpenAI 或 X 官方服务</span><span>约每 15 分钟采集 · 时间按设备时区显示</span></footer></div>
+  </div>;
 }

@@ -6,6 +6,17 @@
 
 [打开在线看板](https://brandon030722.github.io/token-reset/) · [下载 Mac / Windows 应用](https://github.com/Brandon030722/token-reset-desktop/releases/tag/v0.1.2) · [邀请订阅邮件](https://token-reset-mail.brandon030722-token-reset.workers.dev/subscribe)
 
+## 四页，按需查看
+
+| 页面 | 内容 |
+| --- | --- |
+| 概览 | 当前有效信号、采集状态和最近动态 |
+| 动态 | 重置公告、适用范围、判断依据与原帖 |
+| 邮件 | 邀请码订阅入口、邮箱确认和提醒规则 |
+| 下载 | Mac 与 Windows 桌面版下载及使用说明 |
+
+网页默认读取实时数据。来源不可用或数据过期时隐藏当前评分，保留历史动态；不使用演示数值填补空白。
+
 ## 免费查看重置线索
 
 无需邀请码，即可查看当前重置信号、最近检查结果、相关动态和原帖。

@@ -1,1 +1,7 @@
-{"subscriptionUrl": "https://token-reset-mail.brandon030722-token-reset.workers.dev/subscribe"}
+{
+  "subscriptionUrl": "https://token-reset-mail.brandon030722-token-reset.workers.dev/subscribe",
+  "desktopVersion": "0.1.2",
+  "releaseUrl": "https://github.com/Brandon030722/token-reset-desktop/releases/tag/v0.1.2",
+  "macDownloadUrl": "https://github.com/Brandon030722/token-reset-desktop/releases/download/v0.1.2/Token-reset-desktop-v0.1.2-macOS-arm64.zip",
+  "windowsDownloadUrl": "https://github.com/Brandon030722/token-reset-desktop/releases/download/v0.1.2/Token-reset-desktop-v0.1.2-Windows-x64.zip"
+}
