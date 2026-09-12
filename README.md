@@ -4,7 +4,7 @@
 
 关注 Tibo 的公开动态，整理 Codex 额度重置线索，并为受邀用户提供邮件提醒。
 
-[打开在线看板](https://brandon030722.github.io/token-reset/) · [下载 Mac / Windows 应用](https://github.com/Brandon030722/token-reset-desktop/releases/tag/v0.1.2) · [邀请订阅邮件](https://token-reset-mail.brandon030722-token-reset.workers.dev/subscribe)
+[打开在线看板](https://brandon030722.github.io/token-reset/) · [下载 Mac / Windows 应用](https://github.com/Brandon030722/token-reset-desktop/releases/tag/v0.1.3) · [邀请订阅邮件](https://token-reset-mail.brandon030722-token-reset.workers.dev/subscribe)
 
 ## 四页，按需查看
 
