@@ -112,8 +112,9 @@ def run(config_path="monitor.config.json", state=".local/state.sqlite3",
                         if not token: raise ValueError("Missing BREVO_API_KEY")
                         announcements = dispatch_announcements(store, snapshot, now, config, Brevo(token), checkpoint)
                         if any(a["status"] == "needs-review" for a in announcements): result = "needs-review"
-                        elif any(a["status"] == "submitted" for a in announcements): result = "submitted"
-                        elif announcements: result = announcements[0]["status"]
+                        elif result not in ("needs-review", "mail-failed"):
+                            if any(a["status"] == "submitted" for a in announcements): result = "submitted"
+                            elif announcements: result = announcements[0]["status"]
                     except Exception as exc:
                         result = "mail-failed"
                         store.put("lastMailError", {"at": stamp(now), "reason": type(exc).__name__, "status": result})

@@ -142,3 +142,15 @@ class AnnouncementMailTests(unittest.TestCase):
         self.assertEqual(result['notification'],'submitted')
         self.assertEqual(result['announcements'][0]['status'],'submitted')
         self.assertTrue(any(u.endswith('/sendNow') for m,u,p in c.calls))
+
+
+    def test_announcement_success_does_not_hide_global_mail_failure(self):
+        from monitor.runner import run
+        p=self.root/'config.json';p.write_text(json.dumps({**CONFIG,'mailProvider':'brevo','apiKey':'test-only','sendEmail':True}))
+        posts=[{'id':'777','text':'Hi Astra users. A reset is also landing by midnight today.','postedAt':stamp(NOW),'url':'https://x.com/thsottiaux/status/777'},
+               {'id':'778','text':'We will reset Codex for everyone today.','postedAt':stamp(NOW),'url':'https://x.com/thsottiaux/status/778'}]
+        with patch('monitor.runner.datetime') as dt, patch('monitor.runner.fetch_feeds',return_value=(posts,'test',[])), patch('monitor.runner.Brevo',return_value=Client()), patch('monitor.runner.dispatch_brevo',side_effect=TimeoutError()), patch.dict('os.environ',{},clear=True):
+            dt.now.return_value=NOW
+            result=run(p,self.store.path,self.root/'data')
+        self.assertEqual(result['notification'],'mail-failed')
+        self.assertEqual(result['announcements'][0]['status'],'submitted')
