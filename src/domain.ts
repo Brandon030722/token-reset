@@ -5,7 +5,7 @@ export interface Evidence {
   text: string; summary: string; url: string; kind: EvidenceKind;
 }
 export interface ResetEvent {
-  id: string; title: string; type: 'global-reset' | 'credit-grant' | 'limited-reset';
+  id: string; title: string; announcement?: boolean; type: 'global-reset' | 'credit-grant' | 'limited-reset';
   status: EventStatus; scope: string; announcedAt?: string; expectedAt?: string;
   confirmedAt?: string; reviewRequired?: boolean; evidenceIds: string[];
 }

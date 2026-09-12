@@ -5,9 +5,9 @@ import re
 import urllib.request
 from time import monotonic
 from datetime import timedelta
-from .engine import eligible
+from .engine import eligible, announcement_candidates
 from .feeds import stamp
-from .email_design import forecast_email
+from .email_design import forecast_email, announcement_email
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -55,10 +55,27 @@ def readiness(client, config):
 
 
 def dispatch_brevo(store, snapshot, now, config, client, checkpoint=lambda: None):
+    return _dispatch_campaign(store, now, config, client, snapshot["forecast"]["eventId"] if snapshot.get("forecast") else "",
+        f'Codex 重置观察：信号评分 {snapshot["forecast"]["probability48h"]}/100' if snapshot.get("forecast") else "",
+        lambda: render_brevo(snapshot), lambda at: eligible(snapshot, at), checkpoint)
+
+
+def dispatch_announcements(store, snapshot, now, config, client, checkpoint=lambda: None):
+    results = []
+    for candidate in announcement_candidates(snapshot, now):
+        event, source = candidate["event"], candidate["source"]
+        event_id = event["id"]
+        result = _dispatch_campaign(store, now, config, client, "announcement:" + event_id,
+            "Token重置 · " + event["title"], lambda: announcement_email(event, source),
+            lambda at: any(c["event"]["id"] == event_id for c in announcement_candidates(snapshot, at)), checkpoint)
+        results.append({"eventId": event_id, "status": result})
+    return results
+
+
+def _dispatch_campaign(store, now, config, client, event_id, subject, render_html, still_eligible, checkpoint):
     started = monotonic()
-    if not eligible(snapshot, now):
+    if not still_eligible(now):
         return "not-eligible"
-    event_id = snapshot["forecast"]["eventId"]
     prior = store.alert(event_id)
     if prior:
         return "needs-review" if prior["status"] in ("creating", "created", "scheduling") else prior["status"]
@@ -79,8 +96,8 @@ def dispatch_brevo(store, snapshot, now, config, client, checkpoint=lambda: None
         campaign = client.request("POST", "/emailCampaigns", {
             "name": "token-reset:" + event_id, "type": "classic",
             "sender": {"name": "Token重置", "email": config["fromEmail"]},
-            "subject": f'Codex 重置观察：信号评分 {snapshot["forecast"]["probability48h"]}/100',
-            "htmlContent": render_brevo(snapshot),
+            "subject": subject,
+            "htmlContent": render_html(),
             "recipients": {"listIds": [int(config["listId"])]},
         })
         campaign_id = str(campaign.get("id", ""))
@@ -96,7 +113,7 @@ def dispatch_brevo(store, snapshot, now, config, client, checkpoint=lambda: None
         if readiness(client, config) != "ready":
             raise ValueError("Quota or audience changed; review the unsent draft")
         store.set_alert(event_id, "scheduling", campaign_id, stamp(now)); checkpoint()
-        if not eligible(snapshot, now + timedelta(seconds=monotonic() - started)):
+        if not still_eligible(now + timedelta(seconds=monotonic() - started)):
             raise ValueError("Forecast expired before sending; review the unsent draft")
         client.request("POST", "/emailCampaigns/" + campaign_id + "/sendNow")
         store.set_alert(event_id, "submitted", campaign_id, stamp(now)); checkpoint()

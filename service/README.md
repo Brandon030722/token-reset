@@ -1,6 +1,6 @@
 # Token重置邀请邮件服务
 
-**部署状态：已上线；真实邀请码验证、邮箱确认及专用名单已接通。** 这份代码不能仅靠 GitHub Pages 运行。服务和权限验证使用 Workers + D1；公开动态监控仍由原 GitHub Actions 负责。
+**部署状态：已上线；真实邀请码验证、邮箱确认及专用名单已接通。** 这份代码不能仅靠 GitHub Pages 运行。服务和权限验证使用 Workers + D1；Workers 定时触发 GitHub Actions 执行公开动态监控。
 
 ## 边界
 
@@ -31,13 +31,23 @@ D1 私有保存邮箱、token 摘要、确认状态和预约。随机 scope 区�
 
 服务端对 IP、单邮箱注册和每日投递做限额；当前确认信与个人周信总计最多 200 封/日，个人周信每邮箱每天最多 4 封。发信前检查 Brevo Free 额度。旧公共群发共享 Brevo 额度，可能被耗尽；不自动付费。
 
-每 15 分钟检查，单轮最多 25 个到期预约；GitHub Actions 和邮件投递均可能延迟。预约只接受新近读取的一周窗口，不根据七天周期无限生成。**开源客户端无法证明其时间确实来自 Codex**，因此服务器限制只能通知该已确认邮箱，并限制发送频率。
+每 15 分钟检查，单轮最多 25 个到期预约。公共监控由 Workers 同时触发 GitHub Actions，GitHub 自身的定时任务作为备用；任务排队和邮件投递仍可能延迟。预约只接受新近读取的一周窗口，不根据七天周期无限生成。**开源客户端无法证明其时间确实来自 Codex**，因此服务器限制只能通知该已确认邮箱，并限制发送频率。
 
 重复上传以订阅、随机范围、窗口及时间去重；投递前先在数据库原子领取。超时后标记 `needs-review`，不自动重发。关闭预约、退订与正在执行的投递之间有短暂竞争，已进入投递的邮件不能撤回。
 
 测试使用真实 SQLite、虚拟时钟及模拟 Brevo，不向外发送邮件：`npm test`。
 
 参考：[Workers 免费额度](https://developers.cloudflare.com/workers/platform/pricing/)、[D1 文档](https://developers.cloudflare.com/d1/)、[Brevo Contacts API](https://developers.brevo.com/reference/create-contact)。
+
+## 公共监控定时触发
+
+在私有 Wrangler 配置的 `vars` 中设置 `GITHUB_MONITOR_REPO` 为 `Brandon030722/token-reset`，并通过 Secret stdin 设置 `GITHUB_DISPATCH_TOKEN`。推荐只授权目标仓库、具备 Actions 写入权限的 fine-grained GitHub token；不要把令牌提交到仓库。两项都未配置时不调用 GitHub，保留原先的个人预约服务。
+
+Workers 每个 15 分钟时间段只原子领取一次触发机会，固定运行目标仓库的 `monitor.yml`、`main`，不发送连接测试邮件。公共发布仍经过工作流已有的串行执行和投递去重。个人预约与公共监控独立运行，其中一个失败不阻止另一个执行。
+
+`mail_diagnostics` 中的 `monitor-dispatch` 记录 GitHub 受理或失败状态，`weekly-scheduler` 记录个人预约的整轮执行错误，仅保留这两类调度记录最近 30 天。受理仅表示 GitHub 接收了触发请求，运行结果需检查 Actions。401、403、跳转和异常响应都不算成功；网络超时不在同一时间段重复触发，下一轮再尝试。已有 `counters`、`mail_diagnostics` 表即可，无需新增迁移。
+
+参考：[GitHub workflow dispatch API](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)。
 
 ## 签发邀请码
 

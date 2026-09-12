@@ -4,10 +4,10 @@ import os
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from .engine import eligible, update
+from .engine import eligible, update, announcement_candidates
 from .feeds import FeedUnavailable, date, fetch_feeds, stamp
 from .mail import MailerLite, dispatch, render
-from .brevo import Brevo, dispatch_brevo, render_brevo
+from .brevo import Brevo, dispatch_brevo, render_brevo, dispatch_announcements
 from .local_notifications import run_local_notification
 from .store import Store, atomic_json, process_lock
 
@@ -103,7 +103,24 @@ def run(config_path="monitor.config.json", state=".local/state.sqlite3",
                         # prevent the separate local-notification outbox from running.
                         result = "needs-review" if store.alert(snapshot["forecast"]["eventId"]) else "mail-failed"
                         store.put("lastMailError", {"at": stamp(now), "reason": type(exc).__name__, "status": result})
-            return {"status": "ok", "posts": len(posts), "notification": result, "source": source}
+            announcements = []
+            if config["mailProvider"] == "brevo" and announcement_candidates(snapshot, now):
+                enabled = os.environ.get("TIBO_SEND_EMAIL", str(config.get("sendEmail", False))).lower() == "true"
+                if enabled and not dry_run:
+                    try:
+                        token = os.environ.get("BREVO_API_KEY") or config.get("apiKey", "")
+                        if not token: raise ValueError("Missing BREVO_API_KEY")
+                        announcements = dispatch_announcements(store, snapshot, now, config, Brevo(token), checkpoint)
+                        if any(a["status"] == "needs-review" for a in announcements): result = "needs-review"
+                        elif any(a["status"] == "submitted" for a in announcements): result = "submitted"
+                        elif announcements: result = announcements[0]["status"]
+                    except Exception as exc:
+                        result = "mail-failed"
+                        store.put("lastMailError", {"at": stamp(now), "reason": type(exc).__name__, "status": result})
+                        checkpoint()
+                else:
+                    result = "draft-only"
+            return {"status": "ok", "posts": len(posts), "notification": result, "announcements": announcements, "source": source}
         finally:
             store.close()
 

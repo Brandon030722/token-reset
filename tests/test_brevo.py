@@ -98,3 +98,47 @@ class BrevoTests(unittest.TestCase):
         self.assertNotIn('href="javascript:', body)
         self.assertIn('{{ unsubscribe }}', body)
         self.assertIn('北京时间', body)
+
+class AnnouncementMailTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name); self.store=Store(self.root/'state.sqlite3')
+        update(self.store,[],NOW-timedelta(hours=1))
+    def tearDown(self): self.store.close(); self.tmp.cleanup()
+    def announcement(self):
+        return update(self.store,[{'id':'777','text':'Hi Astra users. A reset is also landing by midnight today.','postedAt':stamp(NOW),'url':'https://x.com/thsottiaux/status/777'}],NOW)
+
+    def test_announcement_without_forecast_sends_once_and_honors_durable_claim(self):
+        from monitor.brevo import dispatch_announcements
+        snapshot=self.announcement();self.assertIsNone(snapshot['forecast'])
+        c=Client();result=dispatch_announcements(self.store,snapshot,NOW,CONFIG,c)
+        self.assertEqual(result[0]['status'],'submitted')
+        body=next(p for m,u,p in c.calls if m=='POST' and u=='/emailCampaigns')
+        self.assertIn('Astra',body['htmlContent']);self.assertIn('{{ unsubscribe }}',body['htmlContent'])
+        self.assertNotIn('/100',body['htmlContent']);self.assertIn('未注明时区',body['htmlContent'])
+        before=len(c.calls);dispatch_announcements(self.store,snapshot,NOW,CONFIG,c);self.assertEqual(before,len(c.calls))
+
+    def test_announcement_timeout_never_resends(self):
+        from monitor.brevo import dispatch_announcements
+        snapshot=self.announcement();c=Client(fail='/emailCampaigns/99/sendNow')
+        with self.assertRaises(TimeoutError):dispatch_announcements(self.store,snapshot,NOW,CONFIG,c)
+        self.assertEqual(dispatch_announcements(self.store,snapshot,NOW,CONFIG,c)[0]['status'],'needs-review')
+        self.assertEqual(sum(u.endswith('/sendNow') for m,u,p in c.calls),1)
+
+    def test_late_and_demo_announcements_do_not_call_provider(self):
+        from monitor.brevo import dispatch_announcements
+        snapshot=self.announcement();c=Client()
+        self.assertEqual(dispatch_announcements(self.store,snapshot,NOW+timedelta(days=1),CONFIG,c),[])
+        snapshot['mode']='demo';self.assertEqual(dispatch_announcements(self.store,snapshot,NOW,CONFIG,c),[])
+        self.assertEqual(c.calls,[])
+
+    def test_runner_delivers_announcement_when_global_forecast_is_empty(self):
+        from monitor.runner import run
+        p=self.root/'config.json';p.write_text(json.dumps({**CONFIG,'mailProvider':'brevo','apiKey':'test-only','sendEmail':True}))
+        post={'id':'777','text':'Hi Astra users. A reset is also landing by midnight today.','postedAt':stamp(NOW),'url':'https://x.com/thsottiaux/status/777'}
+        c=Client()
+        with patch('monitor.runner.datetime') as dt, patch('monitor.runner.fetch_feeds',return_value=([post],'test',[])), patch('monitor.runner.Brevo',return_value=c), patch.dict('os.environ',{},clear=True):
+            dt.now.return_value=NOW
+            result=run(p,self.store.path,self.root/'data')
+        self.assertEqual(result['notification'],'submitted')
+        self.assertEqual(result['announcements'][0]['status'],'submitted')
+        self.assertTrue(any(u.endswith('/sendNow') for m,u,p in c.calls))

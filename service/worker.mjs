@@ -206,10 +206,49 @@ export function service({fetcher = fetch, clock = Date.now} = {}) {
       await api(env, 'POST', '/contacts/lists/' + env.BREVO_LIST_ID + '/contacts/remove', {emails:[email]});
     }
   }
-  async function scheduled(env) {
+  async function dispatchMonitor(env) {
+    // Optional for self-hosters. Credentials only ever go to GitHub's API;
+    // neither the workflow/ref nor its inputs can be supplied by a client.
+    if (!env.GITHUB_DISPATCH_TOKEN && !env.GITHUB_MONITOR_REPO) return {status:'disabled'};
+    required(env.DB && typeof env.GITHUB_DISPATCH_TOKEN === 'string' && /^[^\s]{20,1024}$/.test(env.GITHUB_DISPATCH_TOKEN) &&
+      typeof env.GITHUB_MONITOR_REPO === 'string' && /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(env.GITHUB_MONITOR_REPO), 503, '公共监控调度配置无效。');
+    const interval = 15 * 60000, bucket = Math.floor(clock() / interval);
+    const key = 'monitor-dispatch:' + bucket;
+    // Claim before the request, including unknown outcomes: never dispatch twice
+    // on a retried cron event. A later quarter-hour can try again safely.
+    const claimed = await stmt(env, 'INSERT INTO counters(key,count,expires_at) VALUES (?,1,?) ON CONFLICT(key) DO NOTHING RETURNING key', key, (bucket + 2) * interval).first();
+    if (!claimed) return {status:'duplicate'};
+    try {
+      const response = await fetcher('https://api.github.com/repos/' + env.GITHUB_MONITOR_REPO + '/actions/workflows/monitor.yml/dispatches', {
+        method:'POST', redirect:'manual', signal:AbortSignal.timeout(10000),
+        headers:{Authorization:'Bearer ' + env.GITHUB_DISPATCH_TOKEN,Accept:'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2026-03-10','User-Agent':'Token-reset-monitor'},
+        body:JSON.stringify({ref:'main',inputs:{test_email:false}})
+      });
+      // New API versions return the run id; older installations return 204.
+      let accepted = response.status === 204;
+      if (response.status === 200) {
+        let body; try { body = await response.json(); } catch { body = null; }
+        accepted = Number.isSafeInteger(body?.workflow_run_id) && body.workflow_run_id > 0;
+      }
+      if (!accepted) {
+        const error = new Error('GitHub did not accept the monitor dispatch');
+        error.providerStatus = response.status;
+        error.providerCode = response.status === 200 ? 'invalid-response' : 'github-http-error';
+        throw error;
+      }
+      await stmt(env, 'UPDATE counters SET count=2 WHERE key=?', key).run();
+      await stmt(env, 'INSERT INTO mail_diagnostics(id,stage,status,code,created_at) VALUES (?,?,?,?,?)', random(), 'monitor-dispatch', response.status, 'accepted', clock()).run();
+      return {status:'accepted'};
+    } catch (error) {
+      await stmt(env, 'UPDATE counters SET count=3 WHERE key=?', key).run();
+      throw error;
+    }
+  }
+  async function weeklyScheduled(env) {
     configured(env);
     const now = clock();
     await stmt(env, 'DELETE FROM counters WHERE expires_at<?', now).run();
+    await stmt(env, "DELETE FROM mail_diagnostics WHERE stage IN ('monitor-dispatch','weekly-scheduler') AND created_at<?", now-30*DAY).run();
     await stmt(env, 'DELETE FROM sessions WHERE expires_at<? OR (confirmed=0 AND confirm_expires<?)', now, now-7*DAY).run();
     const jobs = (await stmt(env, "SELECT j.*,u.email FROM jobs j JOIN subscribers u ON u.id=j.subscriber_id JOIN schedules s ON s.subscriber_id=j.subscriber_id WHERE j.status='pending' AND u.active=1 AND s.enabled=1 AND s.scope=j.scope AND due_at<=? AND due_at>=? ORDER BY due_at LIMIT 25", now, now-DAY).all()).results;
     let submitted = 0;
@@ -231,6 +270,21 @@ export function service({fetcher = fetch, clock = Date.now} = {}) {
       }
     }
     return {submitted};
+  }
+  async function scheduled(env) {
+    // One provider failure must not starve the other task. Wait for both before
+    // surfacing failure to the cron runtime; diagnostics contain no credentials.
+    const outcomes = await Promise.allSettled([dispatchMonitor(env), weeklyScheduled(env)]);
+    let failed = false;
+    for (const [index, result] of outcomes.entries()) {
+      if (result.status !== 'rejected') continue;
+      failed = true;
+      const error = result.reason;
+      const code = error.providerCode || (error.name === 'TimeoutError' ? 'timeout' : error instanceof Fault ? 'configuration-error' : 'execution-error');
+      await stmt(env, 'INSERT INTO mail_diagnostics(id,stage,status,code,created_at) VALUES (?,?,?,?,?)', random(), index === 0 ? 'monitor-dispatch' : 'weekly-scheduler', error.providerStatus || null, code, clock()).run();
+    }
+    if (failed) throw new Error('A scheduled task failed; inspect private scheduler diagnostics.');
+    return {...outcomes[1].value,monitorDispatch:outcomes[0].value};
   }
   return {fetch: async (request, env) => { try { return await route(request, env); } catch (error) { return json({message:error instanceof Fault ? error.message : '服务暂时不可用，请稍后再试。'}, error instanceof Fault ? error.status : 503); } }, scheduled: async (_event, env) => scheduled(env)};
 }

@@ -81,3 +81,18 @@ def forecast_email(snapshot, preview=False):
         content += '<div style="margin-top:24px">' + button('去看看最新线索', url) + '</div>'
     return shell('Token重置 · 新的重置线索', '重置线索达到提醒线，查看评分、适用范围与原帖。', content,
                  '你收到这封邮件，是因为已确认订阅 Token重置。<br>同一事件只提醒一次。想安静一阵？<a href="{{ unsubscribe }}" style="color:#326bbe;text-decoration:underline">退订提醒</a>。')
+
+
+def announcement_email(event, source):
+    title = event['title']
+    content = '<p style="margin:0 0 8px;color:#326bbe;font-size:12px;font-weight:bold">Tibo 有新消息</p>'
+    content += f'<h1 style="font-size:28px;line-height:1.4;margin:0 0 18px">{escape(title)}</h1>'
+    content += f'<p style="color:#53647a">{escape(source["summary"])}</p>'
+    content += f'<div style="padding:20px;background:#edf5ff;border-radius:15px"><strong>适用范围</strong><br>{escape(event["scope"])}</div>'
+    if event.get('announcement') and 'midnight today' in source['text'].lower():
+        content += '<p>原帖预告“今天午夜前”重置，未注明时区。请以实际额度和后续公告为准。</p>'
+    content += f'<p style="font-size:12px;color:#64748b">发布于 {local_time(source["postedAt"])}</p>'
+    url = source_url(source['url'])
+    if url: content += button('查看 Tibo 原帖', url)
+    return shell('Token重置 · ' + title, source['summary'], content,
+        '你已订阅 Token重置 公告提醒。同一事件一次。<br><a href="{{ unsubscribe }}" style="color:#326bbe">退订提醒</a>')
