@@ -1,9 +1,21 @@
 {
   "version": 1,
   "mode": "live",
-  "checkedAt": "2026-09-12T06:28:01.487177Z",
+  "checkedAt": "2026-09-12T08:12:42.318535Z",
   "forecast": null,
   "events": [
+    {
+      "id": "limited-2098612714704891959",
+      "title": "Astra 重置公告",
+      "type": "limited-reset",
+      "status": "promised",
+      "scope": "Astra 用户；具体套餐和适用资格未说明，请以原帖为准。",
+      "announcedAt": "2026-09-12T03:20:36Z",
+      "evidenceIds": [
+        "post-2098612714704891959"
+      ],
+      "announcement": true
+    },
     {
       "id": "limited-2097752790177370535",
       "title": "小范围重置公告",
@@ -26,6 +38,16 @@
       "url": "https://x.com/thsottiaux/status/2097752790177370535",
       "kind": "context",
       "summary": "原帖宣布限定范围的额度重置；不代表全体用户适用，完成情况请核对原文。"
+    },
+    {
+      "id": "post-2098612714704891959",
+      "eventId": "limited-2098612714704891959",
+      "author": "@thsottiaux",
+      "postedAt": "2026-09-12T03:20:36Z",
+      "text": "Hi Astra users. A reset and a quick update on quality issues that have been posted around. Working with some of you, we have found and fixed the following issues: - Some skills written for previous models were triggering too often or preventing the model from checking its work. - An opt-in context management experiment that could cause early stops or replies to older messages. We've disabled it. Our rough estimate is that 4-5k users were affected by this experiment. - We've also removed some badly configured engines that resulted in a measured quality degradation for a long tail of traffic flowing through them. We’ve also made some more minor improvements and things should feel significantly better across the board. More consistent follow-through, better tracking of your latest message, and better checks on the work as it’s going through the motions. The examples posted and all the users who worked directly with us were incredibly useful in helping fix things quickly. Always grateful for this incredible community. And of course, a reset is also landing by midnight today.",
+      "url": "https://x.com/thsottiaux/status/2098612714704891959",
+      "kind": "context",
+      "summary": "原帖明确宣布重置；具体套餐和适用资格未说明，时间以原帖为准。"
     }
   ],
   "history": []
