@@ -1,8 +1,10 @@
 {
-  "status": "ok",
-  "attemptedAt": "2026-09-26T05:37:35.317167Z",
-  "source": "fxtwitter.com",
-  "posts": 55,
-  "failures": [],
-  "note": "镜像成功响应不保证时间线完整；按规则判断，非官方确认。"
+  "status": "unavailable",
+  "attemptedAt": "2026-09-26T06:07:30.534584Z",
+  "failures": [
+    {
+      "host": "fxtwitter.com",
+      "reason": "HTTPError"
+    }
+  ]
 }
