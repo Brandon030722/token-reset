@@ -1,9 +1,36 @@
 {
   "version": 1,
   "mode": "live",
-  "checkedAt": "2026-09-25T23:52:35.309233Z",
-  "forecast": null,
+  "checkedAt": "2026-09-26T00:07:55.111217Z",
+  "forecast": {
+    "id": "forecast-reset-2103637477760311522",
+    "eventId": "reset-2103637477760311522",
+    "probability24h": 35,
+    "probability48h": 55,
+    "generatedAt": "2026-09-26T00:07:55.111217Z",
+    "validUntil": "2026-09-26T01:07:55.111217Z",
+    "windowEndsAt": "2026-09-28T00:07:13Z",
+    "status": "watching",
+    "summary": "信号评分，不是发生概率。85 分表示原帖同时满足明确承诺、Codex 重置、广泛适用范围和有界时间；尚无历史命中率。",
+    "method": "rules-v2",
+    "scoreType": "ordinal-rule-score",
+    "calibrated": false,
+    "evidenceIds": [
+      "post-2103637477760311522"
+    ]
+  },
   "events": [
+    {
+      "id": "reset-2103637477760311522",
+      "title": "Codex 额度重置线索",
+      "type": "global-reset",
+      "status": "watching",
+      "scope": "以原帖说明为准；规则不推断具体套餐资格",
+      "announcedAt": "2026-09-26T00:07:13Z",
+      "evidenceIds": [
+        "post-2103637477760311522"
+      ]
+    },
     {
       "id": "limited-2098612714704891959",
       "title": "Astra 重置公告",
@@ -48,7 +75,24 @@
       "url": "https://x.com/thsottiaux/status/2098612714704891959",
       "kind": "context",
       "summary": "原帖明确宣布重置；具体套餐和适用资格未说明，时间以原帖为准。"
+    },
+    {
+      "id": "post-2103637477760311522",
+      "eventId": "reset-2103637477760311522",
+      "author": "@thsottiaux",
+      "postedAt": "2026-09-26T00:07:13Z",
+      "text": "o yes… we’re back in action and we’ll reset usage limits for all paid users across codex and ChatGPT work sorry about the brief disruption! (and yes we have a special spare codex when things are down to help us out)",
+      "url": "https://x.com/thsottiaux/status/2103637477760311522",
+      "kind": "hint",
+      "summary": "相关公开线索，语义或适用范围还不充分。"
     }
   ],
-  "history": []
+  "history": [
+    {
+      "at": "2026-09-26T00:07:55.111217Z",
+      "probability24h": 35,
+      "probability48h": 55,
+      "eventId": "reset-2103637477760311522"
+    }
+  ]
 }
