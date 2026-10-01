@@ -1,8 +1,8 @@
 {
   "status": "ok",
-  "attemptedAt": "2026-10-01T18:22:39.179206Z",
+  "attemptedAt": "2026-10-01T18:37:41.436940Z",
   "source": "fxtwitter.com",
-  "posts": 64,
+  "posts": 59,
   "failures": [],
   "note": "镜像成功响应不保证时间线完整；按规则判断，非官方确认。"
 }
