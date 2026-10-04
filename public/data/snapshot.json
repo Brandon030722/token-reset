@@ -1,14 +1,14 @@
 {
   "version": 1,
   "mode": "live",
-  "checkedAt": "2026-10-04T20:38:12.632964Z",
+  "checkedAt": "2026-10-04T21:07:54.636653Z",
   "forecast": {
     "id": "forecast-reset-2106845241357824205",
     "eventId": "reset-2106845241357824205",
     "probability24h": 35,
     "probability48h": 55,
-    "generatedAt": "2026-10-04T20:38:12.632964Z",
-    "validUntil": "2026-10-04T21:38:12.632964Z",
+    "generatedAt": "2026-10-04T21:07:54.636653Z",
+    "validUntil": "2026-10-04T22:07:54.636653Z",
     "windowEndsAt": "2026-10-06T20:33:43Z",
     "status": "watching",
     "summary": "信号评分，不是发生概率。85 分表示原帖同时满足明确承诺、Codex 重置、广泛适用范围和有界时间；尚无历史命中率。",
