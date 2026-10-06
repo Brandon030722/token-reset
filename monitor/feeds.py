@@ -127,7 +127,7 @@ def _retryable(exc, request_url):
         # This live RSS endpoint can intermittently return 404 while its user
         # timeline is still available. Do not retry other missing resources.
         if exc.code == 404:
-            return _known_fxtwitter_feed(request_url) and _known_fxtwitter_feed(exc.geturl())
+            return _known_fxtwitter_feed(request_url) and _known_fxtwitter_feed(exc.filename)
         return exc.code in (408, 429) or 500 <= exc.code <= 599
     if isinstance(exc, urllib.error.URLError):
         return not isinstance(exc.reason, ssl.SSLError)
