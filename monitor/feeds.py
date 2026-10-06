@@ -110,9 +110,25 @@ def parse_feed(body, now, mirror_host=""):
     return sorted(posts.values(), key=lambda p: (p["postedAt"], int(p["id"])))
 
 
-def _retryable(exc):
+def _known_fxtwitter_feed(url):
+    try:
+        u = urlsplit(url)
+        return (u.scheme == "https" and u.hostname == "fxtwitter.com" and
+                u.port in (None, 443) and not u.username and not u.password and
+                u.path == "/thsottiaux/feed.xml")
+    except (TypeError, ValueError):
+        return False
+
+
+def _retryable(exc, request_url):
     if isinstance(exc, urllib.error.HTTPError):
-        return not _access_challenge(exc) and (exc.code in (408, 429) or 500 <= exc.code <= 599)
+        if _access_challenge(exc):
+            return False
+        # This live RSS endpoint can intermittently return 404 while its user
+        # timeline is still available. Do not retry other missing resources.
+        if exc.code == 404:
+            return _known_fxtwitter_feed(request_url) and _known_fxtwitter_feed(exc.geturl())
+        return exc.code in (408, 429) or 500 <= exc.code <= 599
     if isinstance(exc, urllib.error.URLError):
         return not isinstance(exc.reason, ssl.SSLError)
     return isinstance(exc, (TimeoutError, ConnectionError, http.client.IncompleteRead,
@@ -141,13 +157,13 @@ def _retry_after(exc):
     return 0
 
 
-def _failure(exc, url):
+def _failure(exc, url, attempts):
     # Keep diagnostics structured: exception strings and URLs can contain tokens.
     try:
         host = urlsplit(url).hostname or "invalid"
     except ValueError:
         host = "invalid"
-    failure = {"host": host, "reason": type(exc).__name__}
+    failure = {"host": host, "reason": type(exc).__name__, "attempts": attempts}
     if isinstance(exc, urllib.error.HTTPError):
         failure["status"] = exc.code
         failure["category"] = ("access-denied" if _access_challenge(exc) else
@@ -168,13 +184,14 @@ def _failure(exc, url):
     return failure
 
 
-def _read_feed(request, now):
+def _read_feed(request, now, attempts):
     deadline = time.monotonic() + RETRY_BUDGET
     last_error = TimeoutError()
     for attempt in range(len(RETRY_DELAYS) + 1):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise last_error
+        attempts["count"] = attempt + 1
         try:
             with urllib.request.urlopen(request, timeout=min(REQUEST_TIMEOUT, remaining)) as response:
                 if urlsplit(response.url).scheme != "https":
@@ -186,7 +203,7 @@ def _read_feed(request, now):
                 return response.read(LIMIT + 1)
         except Exception as exc:
             last_error = exc
-            if attempt == len(RETRY_DELAYS) or not _retryable(exc):
+            if attempt == len(RETRY_DELAYS) or not _retryable(exc, request.full_url):
                 raise
             delay = max(RETRY_DELAYS[attempt], _retry_after(exc))
             # A long Retry-After means the source is unavailable for this poll.
@@ -199,6 +216,7 @@ def fetch_feeds(urls, now, minimum_posted_at=None):
     """Bounded failover; never bypass authentication, CAPTCHA, or access controls."""
     failures, successes = [], []
     for url in urls[:3]:
+        attempts = {"count": 0}
         try:
             u = urlsplit(url)
             if u.scheme != "https" or not u.hostname or u.username or u.password:
@@ -208,7 +226,7 @@ def fetch_feeds(urls, now, minimum_posted_at=None):
                 "Accept": "application/rss+xml, application/atom+xml, application/xml",
                 "Cache-Control": "no-cache",
             })
-            body = _read_feed(request, now)
+            body = _read_feed(request, now, attempts)
             posts = parse_feed(body, now, u.hostname)
             # Empty feeds can be a broken/changed mirror. Do not mark them fresh.
             if not posts:
@@ -217,7 +235,7 @@ def fetch_feeds(urls, now, minimum_posted_at=None):
                 raise ValueError("Timeline regressed behind the last successful poll")
             successes.append((posts, u.hostname))
         except Exception as exc:
-            failures.append(_failure(exc, url))
+            failures.append(_failure(exc, url, attempts["count"]))
     if not successes:
         raise FeedUnavailable(failures)
     merged = {}

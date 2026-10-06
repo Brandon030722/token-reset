@@ -303,7 +303,68 @@ class FeedTests(unittest.TestCase):
         self.assertEqual(request.call_count, 3)
         self.assertEqual(sleep.call_count, 2)
         self.assertEqual(caught.exception.failures, [{
-            "host": "mirror.example", "reason": "HTTPError", "status": 503, "category": "server-error"}])
+            "host": "mirror.example", "reason": "HTTPError", "status": 503,
+            "category": "server-error", "attempts": 3}])
+
+    def test_known_fxtwitter_feed_404_then_success(self):
+        feed = DEFAULT_FEEDS[0]
+        with patch("monitor.feeds.time.sleep") as sleep, \
+             patch("monitor.feeds.urllib.request.urlopen", side_effect=[
+                 self.http_error(404, url=feed), self.Response(self.BODY)]) as request:
+            posts, source, failures = fetch_feeds([feed], NOW)
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(source, "fxtwitter.com")
+        self.assertEqual(failures, [])
+        self.assertEqual(request.call_count, 2)
+        sleep.assert_called_once()
+
+    def test_known_fxtwitter_feed_404_exhaustion_reports_three_attempts(self):
+        feed = DEFAULT_FEEDS[0]
+        with patch("monitor.feeds.time.sleep") as sleep, \
+             patch("monitor.feeds.urllib.request.urlopen", side_effect=self.http_error(404, url=feed)) as request:
+            with self.assertRaises(FeedUnavailable) as caught:
+                fetch_feeds([feed], NOW)
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
+        self.assertEqual(caught.exception.failures, [{
+            "host": "fxtwitter.com", "reason": "HTTPError", "status": 404,
+            "category": "http-error", "attempts": 3}])
+
+    def test_other_404s_are_not_retried(self):
+        feed = DEFAULT_FEEDS[0]
+        cases = [
+            ("https://mirror.example/feed", "https://mirror.example/feed"),
+            ("https://fxtwitter.com/other/feed.xml", "https://fxtwitter.com/other/feed.xml"),
+            (feed, "https://other.example/thsottiaux/feed.xml"),
+        ]
+        for configured_url, error_url in cases:
+            with self.subTest(configured_url=configured_url, error_url=error_url), \
+                 patch("monitor.feeds.time.sleep") as sleep, \
+                 patch("monitor.feeds.urllib.request.urlopen", side_effect=self.http_error(404, url=error_url)) as request:
+                with self.assertRaises(FeedUnavailable) as caught:
+                    fetch_feeds([configured_url], NOW)
+                self.assertEqual(request.call_count, 1)
+                sleep.assert_not_called()
+                self.assertEqual(caught.exception.failures[0]["attempts"], 1)
+                self.assertEqual(caught.exception.failures[0]["status"], 404)
+
+    def test_known_fxtwitter_feed_access_denial_is_not_retried(self):
+        feed = DEFAULT_FEEDS[0]
+        errors = [
+            self.http_error(401, url=feed),
+            self.http_error(403, url=feed),
+            HTTPError(feed, 404, "Challenge", {"cf-mitigated": "challenge"}, None),
+        ]
+        for error in errors:
+            with self.subTest(status=error.code, headers=error.headers), \
+                 patch("monitor.feeds.time.sleep") as sleep, \
+                 patch("monitor.feeds.urllib.request.urlopen", side_effect=error) as request:
+                with self.assertRaises(FeedUnavailable) as caught:
+                    fetch_feeds([feed], NOW)
+                self.assertEqual(request.call_count, 1)
+                sleep.assert_not_called()
+                self.assertEqual(caught.exception.failures[0]["category"], "access-denied")
+                self.assertEqual(caught.exception.failures[0]["attempts"], 1)
 
     def test_access_denied_and_html_challenge_are_not_retried(self):
         for status in (401, 403, 407):
@@ -401,6 +462,7 @@ class FeedTests(unittest.TestCase):
         self.assertNotIn("token=", diagnostics)
         self.assertEqual(caught.exception.failures[0]["host"], "mirror.example")
         self.assertEqual(caught.exception.failures[0]["status"], 403)
+        self.assertEqual(caught.exception.failures[0]["attempts"], 1)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             config = root / "config.json"
@@ -409,9 +471,28 @@ class FeedTests(unittest.TestCase):
                  patch("monitor.feeds.urllib.request.urlopen", side_effect=error):
                 result = run(config, root / "state.sqlite3", root / "data", dry_run=True)
             self.assertEqual(result["status"], "source-unavailable")
+            self.assertEqual(result["failures"][0]["attempts"], 1)
+            self.assertEqual(json.loads((root / "data" / "health.json").read_text())["failures"][0]["attempts"], 1)
             for report in (json.dumps(result), (root / "data" / "health.json").read_text()):
                 self.assertNotIn(secret, report)
                 self.assertNotIn("token=", report)
+
+    def test_known_fxtwitter_404_health_records_three_attempts(self):
+        feed = DEFAULT_FEEDS[0]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config = root / "config.json"
+            config.write_text(json.dumps({"feeds": [feed]}))
+            with patch.dict("os.environ", {}, clear=True), \
+                 patch("monitor.feeds.time.sleep"), \
+                 patch("monitor.feeds.urllib.request.urlopen", side_effect=self.http_error(404, url=feed)) as request:
+                result = run(config, root / "state.sqlite3", root / "data", dry_run=True)
+            health = json.loads((root / "data" / "health.json").read_text())
+            self.assertEqual(request.call_count, 3)
+            self.assertEqual(result["status"], "source-unavailable")
+            self.assertEqual(health["status"], "unavailable")
+            self.assertEqual(health["failures"], result["failures"])
+            self.assertEqual(health["failures"][0]["attempts"], 3)
 
     def test_stale_cached_response_is_not_fresh(self):
         class Response(io.BytesIO):
