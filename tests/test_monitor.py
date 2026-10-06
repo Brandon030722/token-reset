@@ -1,10 +1,13 @@
 import copy
+import http.client
 import io
 import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from unittest.mock import patch
 from monitor.engine import classify, eligible, update
 from monitor.feeds import FeedUnavailable, fetch_feeds, parse_feed, stamp
@@ -257,19 +260,158 @@ class MonitorTests(unittest.TestCase):
 
 
 class FeedTests(unittest.TestCase):
+    BODY = b"""<rss><channel><item><link>https://x.com/thsottiaux/status/123</link>
+    <pubDate>Thu, 10 Sep 2026 02:00:00 GMT</pubDate><description>Public update</description>
+    </item></channel></rss>"""
+
+    class Response(io.BytesIO):
+        url = "https://mirror.example/feed"
+        headers = {"Age": "0"}
+
+    @staticmethod
+    def http_error(status, retry_after=None, url="https://mirror.example/feed"):
+        headers = {"Retry-After": retry_after} if retry_after is not None else {}
+        return HTTPError(url, status, "HTTP failure", headers, None)
+
     def test_fallback_after_unavailable_mirror(self):
-        body = b"""<rss><channel><item><link>https://x.com/thsottiaux/status/123</link>
-        <pubDate>Thu, 10 Sep 2026 02:00:00 GMT</pubDate><description>Public update</description>
-        </item></channel></rss>"""
-        class Response(io.BytesIO):
-            url = "https://second.example/feed"
-            headers = {"Date": "Thu, 10 Sep 2026 03:00:00 GMT", "Age": "0"}
-        with patch("monitor.feeds.urllib.request.urlopen", side_effect=[TimeoutError(), Response(body)]) as request:
+        with patch("monitor.feeds.urllib.request.urlopen", side_effect=[
+                self.http_error(404, url="https://first.example/feed"), self.Response(self.BODY)]) as request:
             posts, source, failures = fetch_feeds(["https://first.example/feed", "https://second.example/feed"], NOW)
         self.assertEqual(source, "second.example")
         self.assertEqual(len(posts), 1)
         self.assertEqual(len(failures), 1)
         self.assertEqual(request.call_count, 2)
+
+    def test_retryable_http_error_then_success(self):
+        for status in (429, 503):
+            with self.subTest(status=status), \
+                 patch("monitor.feeds.time.sleep") as sleep, \
+                 patch("monitor.feeds.urllib.request.urlopen", side_effect=[
+                     self.http_error(status), self.Response(self.BODY)]) as request:
+                posts, source, failures = fetch_feeds(["https://mirror.example/feed"], NOW)
+                self.assertEqual(len(posts), 1)
+                self.assertEqual(source, "mirror.example")
+                self.assertEqual(failures, [])
+                self.assertEqual(request.call_count, 2)
+                sleep.assert_called_once()
+
+    def test_retryable_http_error_exhaustion_reports_status(self):
+        with patch("monitor.feeds.time.sleep") as sleep, \
+             patch("monitor.feeds.urllib.request.urlopen", side_effect=self.http_error(503)) as request:
+            with self.assertRaises(FeedUnavailable) as caught:
+                fetch_feeds(["https://mirror.example/feed"], NOW)
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
+        self.assertEqual(caught.exception.failures, [{
+            "host": "mirror.example", "reason": "HTTPError", "status": 503, "category": "server-error"}])
+
+    def test_access_denied_and_html_challenge_are_not_retried(self):
+        for status in (401, 403, 407):
+            with self.subTest(status=status), \
+                 patch("monitor.feeds.time.sleep") as sleep, \
+                 patch("monitor.feeds.urllib.request.urlopen", side_effect=self.http_error(status, "1")) as request:
+                with self.assertRaises(FeedUnavailable) as caught:
+                    fetch_feeds(["https://mirror.example/feed"], NOW)
+                self.assertEqual(caught.exception.failures[0]["status"], status)
+                self.assertEqual(caught.exception.failures[0]["category"], "access-denied")
+                self.assertEqual(request.call_count, 1)
+                sleep.assert_not_called()
+        challenge = HTTPError("https://mirror.example/feed", 503, "Challenge",
+                              {"cf-mitigated": "challenge", "Retry-After": "1"}, None)
+        with patch("monitor.feeds.time.sleep") as sleep, \
+             patch("monitor.feeds.urllib.request.urlopen", side_effect=challenge) as request:
+            with self.assertRaises(FeedUnavailable) as caught:
+                fetch_feeds(["https://mirror.example/feed"], NOW)
+            self.assertEqual(caught.exception.failures[0]["status"], 503)
+            self.assertEqual(caught.exception.failures[0]["category"], "access-denied")
+            self.assertEqual(request.call_count, 1)
+            sleep.assert_not_called()
+        with patch("monitor.feeds.time.sleep") as sleep, \
+             patch("monitor.feeds.urllib.request.urlopen", return_value=self.Response(b"<html>Verify you are human</html>")) as request:
+            with self.assertRaises(FeedUnavailable) as caught:
+                fetch_feeds(["https://mirror.example/feed"], NOW)
+            self.assertEqual(caught.exception.failures[0]["category"], "invalid-feed")
+            self.assertEqual(request.call_count, 1)
+            sleep.assert_not_called()
+
+    def test_retry_after_seconds_and_http_date_are_honored(self):
+        retry_values = ["4", format_datetime(datetime.now(timezone.utc) + timedelta(seconds=5), usegmt=True)]
+        for value in retry_values:
+            with self.subTest(value=value), \
+                 patch("monitor.feeds.time.sleep") as sleep, \
+                 patch("monitor.feeds.urllib.request.urlopen", side_effect=[
+                     self.http_error(429, value), self.Response(self.BODY)]) as request:
+                self.assertEqual(len(fetch_feeds(["https://mirror.example/feed"], NOW)[0]), 1)
+                self.assertEqual(request.call_count, 2)
+                self.assertEqual(sleep.call_count, 1)
+                self.assertGreaterEqual(sleep.call_args.args[0], 3)
+                self.assertLessEqual(sleep.call_args.args[0], 5)
+
+    def test_retry_after_beyond_budget_stops_without_sleeping(self):
+        with patch("monitor.feeds.time.sleep") as sleep, \
+             patch("monitor.feeds.urllib.request.urlopen", side_effect=self.http_error(429, "120")) as request:
+            with self.assertRaises(FeedUnavailable) as caught:
+                fetch_feeds(["https://mirror.example/feed"], NOW)
+        self.assertEqual(request.call_count, 1)
+        sleep.assert_not_called()
+        self.assertEqual(caught.exception.failures[0]["status"], 429)
+
+    def test_elapsed_request_time_counts_toward_retry_budget(self):
+        clock = [0.0]
+
+        def timed_out(*args, **kwargs):
+            clock[0] = 29.5
+            raise TimeoutError("slow")
+
+        with patch("monitor.feeds.time.monotonic", side_effect=lambda: clock[0]), \
+             patch("monitor.feeds.time.sleep") as sleep, \
+             patch("monitor.feeds.urllib.request.urlopen", side_effect=timed_out) as request:
+            with self.assertRaises(FeedUnavailable):
+                fetch_feeds(["https://mirror.example/feed"], NOW)
+        self.assertEqual(request.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_timeout_and_read_errors_are_retried(self):
+        class BrokenResponse(self.Response):
+            def read(self, *args):
+                raise http.client.IncompleteRead(b"partial", 20)
+
+        failures = [TimeoutError("slow"), URLError(TimeoutError("slow")), ConnectionResetError("reset")]
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__), \
+                 patch("monitor.feeds.time.sleep"), \
+                 patch("monitor.feeds.urllib.request.urlopen", side_effect=[failure, self.Response(self.BODY)]) as request:
+                self.assertEqual(len(fetch_feeds(["https://mirror.example/feed"], NOW)[0]), 1)
+                self.assertEqual(request.call_count, 2)
+        with patch("monitor.feeds.time.sleep"), \
+             patch("monitor.feeds.urllib.request.urlopen", side_effect=[BrokenResponse(self.BODY), self.Response(self.BODY)]) as request:
+            self.assertEqual(len(fetch_feeds(["https://mirror.example/feed"], NOW)[0]), 1)
+            self.assertEqual(request.call_count, 2)
+
+    def test_http_diagnostics_do_not_expose_url_or_response_secrets(self):
+        secret = "TOP_SECRET_TOKEN"
+        url = f"https://mirror.example/feed?token={secret}"
+        error = HTTPError(url, 403, f"denied {secret}", {"Retry-After": "1"}, io.BytesIO(secret.encode()))
+        with patch("monitor.feeds.urllib.request.urlopen", side_effect=error) as request:
+            with self.assertRaises(FeedUnavailable) as caught:
+                fetch_feeds([url], NOW)
+        self.assertEqual(request.call_count, 1)
+        diagnostics = json.dumps(caught.exception.failures)
+        self.assertNotIn(secret, diagnostics)
+        self.assertNotIn("token=", diagnostics)
+        self.assertEqual(caught.exception.failures[0]["host"], "mirror.example")
+        self.assertEqual(caught.exception.failures[0]["status"], 403)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config = root / "config.json"
+            config.write_text(json.dumps({"feeds": [url]}))
+            with patch.dict("os.environ", {}, clear=True), \
+                 patch("monitor.feeds.urllib.request.urlopen", side_effect=error):
+                result = run(config, root / "state.sqlite3", root / "data", dry_run=True)
+            self.assertEqual(result["status"], "source-unavailable")
+            for report in (json.dumps(result), (root / "data" / "health.json").read_text()):
+                self.assertNotIn(secret, report)
+                self.assertNotIn("token=", report)
 
     def test_stale_cached_response_is_not_fresh(self):
         class Response(io.BytesIO):
