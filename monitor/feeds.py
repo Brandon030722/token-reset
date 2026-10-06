@@ -212,8 +212,8 @@ def _read_feed(request, now, attempts):
             time.sleep(delay)
 
 
-def fetch_feeds(urls, now, minimum_posted_at=None):
-    """Bounded failover; never bypass authentication, CAPTCHA, or access controls."""
+def fetch_feeds(urls, now, minimum_posted_at=None, attempt_count=None):
+    """Bounded failover; optionally count HTTP requests without recording URLs."""
     failures, successes = [], []
     for url in urls[:3]:
         attempts = {"count": 0}
@@ -236,6 +236,9 @@ def fetch_feeds(urls, now, minimum_posted_at=None):
             successes.append((posts, u.hostname))
         except Exception as exc:
             failures.append(_failure(exc, url, attempts["count"]))
+        finally:
+            if attempt_count is not None:
+                attempt_count["count"] = attempt_count.get("count", 0) + attempts["count"]
     if not successes:
         raise FeedUnavailable(failures)
     merged = {}

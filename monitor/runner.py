@@ -66,17 +66,20 @@ def run(config_path="monitor.config.json", state=".local/state.sqlite3",
                 return {"status": "cooldown", "nextCheckAt": stamp(date(last_attempt) + timedelta(minutes=15))}
             # Persist an attempt even on network failure, preventing rapid retry loops.
             store.put("lastAttempt", stamp(now))
+            attempt_count = {"count": 0}
             try:
-                posts, source, failures = fetch_feeds(config["feeds"], now, store.get("lastTimelinePostAt"))
+                posts, source, failures = fetch_feeds(config["feeds"], now, store.get("lastTimelinePostAt"), attempt_count)
             except FeedUnavailable as exc:
-                atomic_json(output / "health.json", {"status": "unavailable", "attemptedAt": stamp(now), "failures": exc.failures})
+                atomic_json(output / "health.json", {"status": "unavailable", "attemptedAt": stamp(now),
+                                                     "attempts": attempt_count["count"], "failures": exc.failures})
                 checkpoint()
-                return {"status": "source-unavailable", "failures": exc.failures}
+                return {"status": "source-unavailable", "attempts": attempt_count["count"], "failures": exc.failures}
             snapshot = update(store, posts, now)
             store.put("lastTimelinePostAt", max((p["postedAt"] for p in posts), key=date))
             atomic_json(output / "snapshot.json", snapshot)
             atomic_json(output / "health.json", {
-                "status": "ok", "attemptedAt": stamp(now), "source": source, "posts": len(posts), "failures": failures,
+                "status": "ok", "attemptedAt": stamp(now), "source": source, "posts": len(posts),
+                "attempts": attempt_count["count"], "failures": failures,
                 "note": "镜像成功响应不保证时间线完整；按规则判断，非官方确认。",
             })
             checkpoint()
@@ -121,7 +124,8 @@ def run(config_path="monitor.config.json", state=".local/state.sqlite3",
                         checkpoint()
                 else:
                     result = "draft-only"
-            return {"status": "ok", "posts": len(posts), "notification": result, "announcements": announcements, "source": source}
+            return {"status": "ok", "posts": len(posts), "notification": result,
+                    "announcements": announcements, "source": source, "attempts": attempt_count["count"]}
         finally:
             store.close()
 

@@ -471,8 +471,11 @@ class FeedTests(unittest.TestCase):
                  patch("monitor.feeds.urllib.request.urlopen", side_effect=error):
                 result = run(config, root / "state.sqlite3", root / "data", dry_run=True)
             self.assertEqual(result["status"], "source-unavailable")
+            self.assertEqual(result["attempts"], 1)
             self.assertEqual(result["failures"][0]["attempts"], 1)
-            self.assertEqual(json.loads((root / "data" / "health.json").read_text())["failures"][0]["attempts"], 1)
+            health = json.loads((root / "data" / "health.json").read_text())
+            self.assertEqual(health["attempts"], 1)
+            self.assertEqual(health["failures"][0]["attempts"], 1)
             for report in (json.dumps(result), (root / "data" / "health.json").read_text()):
                 self.assertNotIn(secret, report)
                 self.assertNotIn("token=", report)
@@ -490,9 +493,39 @@ class FeedTests(unittest.TestCase):
             health = json.loads((root / "data" / "health.json").read_text())
             self.assertEqual(request.call_count, 3)
             self.assertEqual(result["status"], "source-unavailable")
+            self.assertEqual(result["attempts"], 3)
             self.assertEqual(health["status"], "unavailable")
+            self.assertEqual(health["attempts"], 3)
             self.assertEqual(health["failures"], result["failures"])
             self.assertEqual(health["failures"][0]["attempts"], 3)
+
+    def test_success_health_counts_retry_attempts_without_exposing_feed_query(self):
+        secret = "TOP_SECRET_TOKEN"
+        feed = f"{DEFAULT_FEEDS[0]}&token={secret}"
+        for expected_attempts in (1, 2):
+            with self.subTest(expected_attempts=expected_attempts), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                config = root / "config.json"
+                config.write_text(json.dumps({"feeds": [feed]}))
+                response = self.Response(self.BODY)
+                response.url = feed
+                replies = [self.http_error(404, url=feed), response] if expected_attempts == 2 else [response]
+                with patch.dict("os.environ", {}, clear=True), \
+                     patch("monitor.feeds.time.sleep") as sleep, \
+                     patch("monitor.feeds.urllib.request.urlopen", side_effect=replies) as request:
+                    result = run(config, root / "state.sqlite3", root / "data", dry_run=True)
+                health_text = (root / "data" / "health.json").read_text()
+                health = json.loads(health_text)
+                self.assertEqual(request.call_count, expected_attempts)
+                self.assertEqual(sleep.call_count, expected_attempts - 1)
+                self.assertEqual(result["status"], "ok")
+                self.assertEqual(result["attempts"], expected_attempts)
+                self.assertEqual(health["status"], "ok")
+                self.assertEqual(health["attempts"], expected_attempts)
+                self.assertEqual(health["failures"], [])
+                self.assertNotIn(secret, json.dumps(result))
+                self.assertNotIn(secret, health_text)
+                self.assertNotIn("token=", health_text)
 
     def test_stale_cached_response_is_not_fresh(self):
         class Response(io.BytesIO):
